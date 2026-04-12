@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>产品开发项目管理表单</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- 登录界面 -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-container">
+            <div class="login-header">
+                <h1>蓝橙产品开发项目管理</h1>
+                <p>请登录以继续</p>
+            </div>
+            <form id="loginForm" class="login-form">
+                <div class="form-group">
+                    <label for="username">用户名</label>
+                    <input type="text" id="username" placeholder="请输入用户名" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">密码</label>
+                    <input type="password" id="password" placeholder="请输入密码" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">登录</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- 主应用界面 -->
+    <div id="mainApp" class="container" style="display: none;">
+        <!-- 头部 -->
+        <header class="header">
+            <div class="header-title-container">
+                <h1>蓝橙产品开发项目管理</h1>
+                <button id="newProjectBtn" class="btn btn-green">新增项目</button>
+            </div>
+            <div class="header-actions">
+                <button id="saveBtn" class="btn btn-primary">保存项目</button>
+                <button id="exportHtmlBtn" class="btn btn-secondary">导出HTML</button>
+                <button id="exportImageBtn" class="btn btn-secondary">导出图片</button>
+                <button id="logoutBtn" class="btn btn-danger">退出登录</button>
+            </div>
+        </header>
+
+        <!-- 主要内容 -->
+        <main class="main-content">
+            <!-- 产品图片上传区域 -->
+            <section class="image-upload-section">
+                <h2>产品图片</h2>
+                <div id="dropZone" class="drop-zone">
+                    <div class="drop-zone-content">
+                        <p>拖拽图片到此处或粘贴图片</p>
+                        <p>支持JPG、PNG、GIF格式</p>
+                    </div>
+                    <input type="file" id="fileInput" accept="image/*" multiple>
+                </div>
+                <div id="imagePreview" class="image-preview"></div>
+            </section>
+
+            <!-- 项目信息表单 -->
+            <section class="form-section">
+                <h2>项目信息</h2>
+                <form id="projectForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="projectName">项目名称</label>
+                            <input type="text" id="projectName" required>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="brand">品牌</label>
+                            <select id="brand" required>
+                                <option value="">请选择</option>
+                                <option value="BLUEO">BLUEO</option>
+                                <option value="TG">TG</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="productCategory">产品类别</label>
+                            <select id="productCategory" required>
+                                <option value="">请选择</option>
+                                <option value="手机壳">手机壳</option>
+                                <option value="充电线">充电线</option>
+                                <option value="充电头">充电头</option>
+                                <option value="移动电源">移动电源</option>
+                                <option value="手机支架">手机支架</option>
+                                <option value="手机挂绳">手机挂绳</option>
+                                <option value="手表带">手表带</option>
+                                <option value="磁吸指环">磁吸指环</option>
+                                <option value="其他">其他</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="productType">产品开发类型</label>
+                            <select id="productType" required>
+                                <option value="">请选择</option>
+                                <option value="整合引入型产品">1 整合引入型产品</option>
+                                <option value="改良升级型产品">2 改良升级型产品</option>
+                                <option value="原创自研型产品">3 原创自研型产品</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="priority">优先级</label>
+                            <select id="priority" required>
+                                <option value="">请选择</option>
+                                <option value="高">高</option>
+                                <option value="中">中</option>
+                                <option value="低">低</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="estimatedLaunchDate">预计上市时间</label>
+                            <input type="text" id="estimatedLaunchDate" placeholder="如：2026-06-15">
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="remarks">备注</label>
+                        <textarea id="remarks" rows="3" placeholder="请输入备注信息..."></textarea>
+                    </div>
+                </form>
+            </section>
+
+            <!-- 项目状态和进度整合 -->
+            <section class="status-progress-section">
+                <h2>项目状态与进度</h2>
+                
+                <!-- 状态和进度控制 -->
+                <div class="status-progress-controls">
+                    <!-- 状态控制 -->
+                    <div class="status-controls">
+                        <div class="status-buttons">
+                            <button class="status-btn" data-status="概念设计">概念设计</button>
+                            <button class="status-btn" data-status="原型开发">原型开发</button>
+                            <button class="status-btn" data-status="产品打样">产品打样</button>
+                            <button class="status-btn" data-status="模具开发">模具开发</button>
+                            <button class="status-btn" data-status="样品测试">样品测试</button>
+                            <button class="status-btn" data-status="模具优化">模具优化</button>
+                            <button class="status-btn" data-status="工艺参数优化">工艺参数优化</button>
+                            <button class="status-btn" data-status="丝印 / 外观细节调整">丝印 / 外观细节调整</button>
+                            <button class="status-btn" data-status="小批量试产">小批量试产</button>
+                            <button class="status-btn" data-status="批量生产">批量生产</button>
+                            <button class="status-btn" data-status="上市筹备">上市筹备</button>
+                            <button class="status-btn" data-status="推广准备">推广准备</button>
+                            <button class="status-btn status-pause" data-status="项目暂停">项目暂停</button>
+                        </div>
+                        <div class="status-input">
+                            <label for="customStatus">自定义状态</label>
+                            <input type="text" id="customStatus" placeholder="或手动输入状态...">
+                            <button id="setCustomStatus" class="btn btn-small">设置</button>
+                        </div>
+                        <div id="currentStatus" class="current-status">
+                            <p>当前状态：<span id="statusText">未设置</span></p>
+                        </div>
+                    </div>
+                    
+                    <!-- 进度控制 -->
+                    <div class="progress-controls">
+                        <div class="progress-header">
+                            <span class="progress-label">项目进度</span>
+                            <span id="progressPercentage" class="progress-percentage">0%</span>
+                        </div>
+                        <div id="progressBar" class="progress-bar">
+                            <div id="progressFill" class="progress-fill"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- 项目列表 -->
+        <section class="project-list-section">
+            <div class="project-list-header">
+                <h2>项目列表</h2>
+                <div class="sort-controls">
+                    <label for="searchInput">搜索：</label>
+                    <input type="text" id="searchInput" placeholder="输入项目名称或关键词">
+                    <label for="sortBy">排序方式：</label>
+                    <select id="sortBy">
+                        <option value="default">默认</option>
+                        <option value="progress">按进度</option>
+                        <option value="priority">按优先级</option>
+                        <option value="launchDate">按上市时间</option>
+                    </select>
+                    <button id="exportDataBtn" class="btn btn-small">导出项目数据</button>
+                    <button id="importDataBtn" class="btn btn-small">加载项目数据</button>
+                    <input type="file" id="importFile" style="display: none;" accept=".json">
+                </div>
+            </div>
+            <div id="projectList" class="project-list"></div>
+        </section>
+    </div>
+
+
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
