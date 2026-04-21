@@ -2,10 +2,14 @@
 let uploadedImages = [];
 let currentProject = null;
 let projects = [];
+let currentEditProjectId = null;
 
 // 数据库路径
 const DB_PATH = 'database/projects.json';
 const IMAGES_PATH = 'database/images/';
+
+// SQLite数据库
+let db = null;
 
 // 登录用户信息
 const DEFAULT_USERS = {
@@ -36,6 +40,47 @@ function logout() {
     showLoginScreen();
 }
 
+// 初始化SQLite数据库
+async function initSQLite() {
+    try {
+        // 加载SQLite WASM文件
+        const SQL = await initSqlJs({
+            locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${file}`
+        });
+        
+        // 创建内存数据库
+        db = new SQL.Database();
+        
+        // 创建项目表
+        db.run(`
+            CREATE TABLE IF NOT EXISTS projects (
+                id TEXT PRIMARY KEY,
+                name TEXT,
+                description TEXT,
+                status TEXT,
+                progress INTEGER,
+                priority TEXT,
+                category TEXT,
+                startDate TEXT,
+                launchDate TEXT,
+                currentStage TEXT,
+                manager TEXT,
+                team TEXT,
+                budget TEXT,
+                images TEXT,
+                remarks TEXT,
+                history TEXT,
+                createdAt TEXT,
+                updatedAt TEXT
+            );
+        `);
+        
+        console.log('SQLite数据库初始化成功');
+    } catch (error) {
+        console.error('SQLite初始化失败:', error);
+    }
+}
+
 // 显示登录界面
 function showLoginScreen() {
     document.getElementById('loginScreen').style.display = 'flex';
@@ -46,6 +91,92 @@ function showLoginScreen() {
 function showMainApp() {
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('mainApp').style.display = 'block';
+}
+
+// 保存项目到SQLite
+async function saveToSQLite(projects) {
+    if (!db) {
+        console.warn('SQLite未初始化，跳过保存');
+        return;
+    }
+    
+    try {
+        // 开启事务
+        db.run('BEGIN TRANSACTION');
+        
+        // 清空表
+        db.run('DELETE FROM projects');
+        
+        // 插入项目数据
+        const stmt = db.prepare(`
+            INSERT INTO projects (
+                id, name, description, status, progress, priority, category, 
+                startDate, launchDate, currentStage, manager, team, budget, 
+                images, remarks, history, createdAt, updatedAt
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `);
+        
+        for (const project of projects) {
+            stmt.run(
+                project.id,
+                project.name,
+                project.description,
+                project.status,
+                project.progress,
+                project.priority,
+                project.category,
+                project.startDate,
+                project.launchDate,
+                project.currentStage,
+                project.manager,
+                project.team,
+                project.budget,
+                JSON.stringify(project.images || []),
+                JSON.stringify(project.remarks || []),
+                JSON.stringify(project.history || []),
+                project.createdAt,
+                project.updatedAt
+            );
+        }
+        
+        stmt.finalize();
+        db.run('COMMIT');
+        
+        console.log('数据保存到SQLite成功');
+    } catch (error) {
+        console.error('保存到SQLite失败:', error);
+        // 回滚事务
+        db.run('ROLLBACK');
+    }
+}
+
+// 从SQLite加载项目
+async function loadFromSQLite() {
+    if (!db) {
+        console.warn('SQLite未初始化，跳过加载');
+        return [];
+    }
+    
+    try {
+        const projects = [];
+        const stmt = db.prepare('SELECT * FROM projects');
+        
+        while (stmt.step()) {
+            const row = stmt.getAsObject();
+            // 解析JSON字段
+            row.images = JSON.parse(row.images || '[]');
+            row.remarks = JSON.parse(row.remarks || '[]');
+            row.history = JSON.parse(row.history || '[]');
+            projects.push(row);
+        }
+        
+        stmt.finalize();
+        console.log('从SQLite加载项目成功');
+        return projects;
+    } catch (error) {
+        console.error('从SQLite加载失败:', error);
+        return [];
+    }
 }
 
 // 确保目录存在
@@ -115,6 +246,9 @@ function loadProjectsFromFileSystem(file) {
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', async function() {
+    // 初始化SQLite数据库
+    await initSQLite();
+    
     // 检查登录状态
     if (checkLoginStatus()) {
         showMainApp();
@@ -125,7 +259,42 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // 初始化登录表单
     initializeLoginForm();
+
+    // 检查数据备份状态
+    checkBackupStatus();
 });
+
+// 检查数据备份状态
+function checkBackupStatus() {
+    const lastExport = localStorage.getItem('lastExport');
+    const today = new Date();
+    
+    if (!lastExport) {
+        // 首次使用，提醒用户
+        setTimeout(() => {
+            if (confirm('欢迎使用蓝橙产品开发项目管理系统！\n\n为了确保数据安全，建议您定期导出项目数据。\n\n是否现在导出数据？')) {
+                exportProjectData();
+            }
+        }, 3000);
+    } else {
+        // 检查是否超过7天未导出
+        const lastExportDate = new Date(lastExport);
+        const daysSinceExport = (today - lastExportDate) / (1000 * 60 * 60 * 24);
+        
+        if (daysSinceExport >= 7) {
+            setTimeout(() => {
+                if (confirm('您已超过7天未导出项目数据。\n\n为了确保数据安全，建议定期导出数据备份。\n\n是否现在导出数据？')) {
+                    exportProjectData();
+                }
+            }, 3000);
+        }
+    }
+}
+
+// 更新最后导出时间
+function updateLastExportTime() {
+    localStorage.setItem('lastExport', new Date().toISOString());
+}
 
 // 初始化登录表单
 function initializeLoginForm() {
@@ -330,6 +499,17 @@ function initializeStatusProgress() {
                 const progress = ((statusIndex + 1) / 12) * 100;
                 progressFill.style.width = `${progress}%`;
                 progressPercentage.textContent = `${Math.round(progress)}%`;
+                
+                // 更新圆形进度条
+                const circularProgressFill = document.getElementById('circularProgressFill');
+                if (circularProgressFill) {
+                    const dashOffset = 226 - (226 * progress / 100);
+                    circularProgressFill.style.strokeDashoffset = dashOffset;
+                    const circularProgressText = circularProgressFill.parentElement.nextElementSibling;
+                    if (circularProgressText) {
+                        circularProgressText.textContent = `${Math.round(progress)}%`;
+                    }
+                }
             }
         });
     });
@@ -389,6 +569,26 @@ function initializeModal() {
     });
 }
 
+// 显示项目弹窗
+function showProjectModal() {
+    const modal = document.getElementById('projectModal');
+    if (modal) {
+        modal.style.display = 'block';
+        modal.classList.add('show');
+        document.body.style.overflow = 'hidden'; // 防止背景滚动
+    }
+}
+
+// 隐藏项目弹窗
+function hideProjectModal() {
+    const modal = document.getElementById('projectModal');
+    if (modal) {
+        modal.style.display = 'none';
+        modal.classList.remove('show');
+        document.body.style.overflow = ''; // 恢复背景滚动
+    }
+}
+
 // 初始化事件监听器
 function initializeEventListeners() {
     // 保存项目按钮
@@ -445,7 +645,24 @@ function initializeEventListeners() {
             // 重置项目ID
             currentProjectId = null;
             
-            alert('已重置表单，开始填写新的项目');
+            // 显示弹窗
+            showProjectModal();
+        });
+    }
+    
+    // 关闭弹窗按钮
+    const closeModalBtn = document.getElementById('closeModalBtn');
+    if (closeModalBtn) {
+        closeModalBtn.addEventListener('click', hideProjectModal);
+    }
+    
+    // 点击弹窗外部关闭弹窗
+    const projectModal = document.getElementById('projectModal');
+    if (projectModal) {
+        projectModal.addEventListener('click', function(e) {
+            if (e.target === projectModal) {
+                hideProjectModal();
+            }
         });
     }
     
@@ -675,57 +892,57 @@ async function saveProject() {
             console.log('新项目添加成功');
         }
 
-        // 保存到IndexedDB
+        // 保存到SQLite
         try {
-            await saveToIndexedDB(projects);
-            console.log('IndexedDB保存成功');
+            await saveToSQLite(projects);
+            console.log('SQLite保存成功');
         } catch (dbError) {
-            console.error('IndexedDB保存失败:', dbError);
+            console.error('SQLite保存失败:', dbError);
+        }
+        
+        // 无论SQLite保存是否成功，都保存到localStorage
+        try {
+            // 优化图片数据，限制存储大小
+            const optimizedProjects = projects.map(project => {
+                return {
+                    ...project,
+                    // 只保存第一张图片，并且限制大小
+                    images: project.images ? project.images.slice(0, 1).map(img => {
+                        // 对于大图片进行压缩
+                        if (img.length > 100000) { // 超过100KB
+                            // 暂时只保留第一张图片的前100KB，不添加'...'以保持DataURL有效性
+                            return img.substring(0, 100000);
+                        }
+                        return img;
+                    }) : []
+                };
+            });
             
-            // 降级到localStorage
+            const projectData = JSON.stringify(optimizedProjects);
+            
+            // 检查数据大小
+            if (projectData.length > 500000) { // 超过500KB
+                alert('项目数据过大，部分图片可能被压缩');
+            }
+            
+            localStorage.setItem('projects', projectData);
+            console.log('本地存储保存成功');
+        } catch (storageError) {
+            console.error('本地存储保存失败:', storageError);
+            
+            // 尝试减少数据量
             try {
-                // 优化图片数据，限制存储大小
-                const optimizedProjects = projects.map(project => {
+                const minimalProjects = projects.map(project => {
                     return {
                         ...project,
-                        // 只保存第一张图片，并且限制大小
-                        images: project.images ? project.images.slice(0, 1).map(img => {
-                            // 对于大图片进行压缩
-                            if (img.length > 100000) { // 超过100KB
-                                // 暂时只保留第一张图片的前100KB，不添加'...'以保持DataURL有效性
-                                return img.substring(0, 100000);
-                            }
-                            return img;
-                        }) : []
+                        images: [] // 完全移除图片数据
                     };
                 });
-                
-                const projectData = JSON.stringify(optimizedProjects);
-                
-                // 检查数据大小
-                if (projectData.length > 500000) { // 超过500KB
-                    alert('项目数据过大，部分图片可能被压缩');
-                }
-                
-                localStorage.setItem('projects', projectData);
-                console.log('本地存储保存成功');
-            } catch (storageError) {
-                console.error('本地存储保存失败:', storageError);
-                
-                // 尝试减少数据量
-                try {
-                    const minimalProjects = projects.map(project => {
-                        return {
-                            ...project,
-                            images: [] // 完全移除图片数据
-                        };
-                    });
-                    localStorage.setItem('projects', JSON.stringify(minimalProjects));
-                    alert('保存成功，但图片数据已移除');
-                } catch (e) {
-                    alert('保存失败：存储错误，请减少项目数据');
-                    return;
-                }
+                localStorage.setItem('projects', JSON.stringify(minimalProjects));
+                alert('保存成功，但图片数据已移除');
+            } catch (e) {
+                alert('保存失败：存储错误，请减少项目数据');
+                return;
             }
         }
         
@@ -739,10 +956,47 @@ async function saveProject() {
         // 重置当前编辑的项目ID，以便下次保存时能够正确创建新项目
         currentEditProjectId = null;
         
+        // 关闭弹窗
+        hideProjectModal();
+        
     } catch (error) {
         console.error('保存项目时出错:', error);
         alert('保存失败：' + error.message);
     }
+}
+
+// 自动导出数据到数据文件夹
+function autoExportData() {
+    if (projects.length === 0) {
+        return;
+    }
+    
+    // 创建导出数据对象
+    const exportData = {
+        version: '1.0',
+        exportDate: new Date().toISOString(),
+        projects: projects
+    };
+    
+    // 将数据转换为JSON字符串
+    const jsonString = JSON.stringify(exportData, null, 2);
+    
+    // 创建Blob对象
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    
+    // 创建下载链接
+    const link = document.createElement('a');
+    link.download = `项目数据_${new Date().toISOString().slice(0,10)}.json`;
+    link.href = URL.createObjectURL(blob);
+    link.click();
+    
+    // 释放URL对象
+    setTimeout(() => {
+        URL.revokeObjectURL(link.href);
+    }, 100);
+    
+    console.log('数据已导出，请将文件保存到「数据」文件夹');
+    alert('数据已导出，请将文件保存到项目根目录的「数据」文件夹中，以便下次加载时使用。');
 }
 
 
@@ -1115,6 +1369,48 @@ function exportHTML() {
             font-style: italic;
         }
         
+        /* 小型圆环进度条样式 */
+        .progress-ring-small {
+            position: relative;
+            width: 50px;
+            height: 50px;
+            background: #e6f2ff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .progress-ring-small svg {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            transform: rotate(-90deg);
+        }
+        
+        .progress-ring-circle-small {
+            fill: none;
+            stroke: #b3d9ff;
+            stroke-width: 5;
+            stroke-linecap: round;
+        }
+        
+        .progress-ring-progress-small {
+            fill: none;
+            stroke: url(#gradientSmall0);
+            stroke-width: 5;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.5s ease;
+        }
+        
+        .progress-ring-text-small {
+            position: relative;
+            font-size: 12px;
+            font-weight: 700;
+            color: #0066cc;
+            z-index: 1;
+        }
+        
         /* 响应式设计 */
         @media (max-width: 1200px) {
             .container {
@@ -1278,7 +1574,7 @@ function exportHTML() {
                     </div>
                     <div class="project-card-content">
                         <div class="project-card-header">
-                            <h2 class="project-name">${index + 1}. ${project.name}</h2>
+                            <h2 class="project-name">${project.name}</h2>
                             <span class="status-tag ${project.status}">
                                 ${project.status}
                             </span>
@@ -1303,50 +1599,27 @@ function exportHTML() {
                         </div>
                         <div class="project-card-progress">
                             <div class="progress-ring-small">
-                                <svg width="80" height="80">
+                                <svg width="50" height="50" style="position: absolute; top: 0; left: 0; transform: rotate(-90deg);">
                                     <defs>
-                                        <linearGradient id="progressGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                            <stop offset="0%" stop-color="#9c27b0"/>
-                                            <stop offset="100%" stop-color="#1e88e5"/>
+                                        <linearGradient id="gradientSmall${index}" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" stop-color="#667eea" />
+                                            <stop offset="100%" stop-color="#764ba2" />
                                         </linearGradient>
                                     </defs>
-                                    <circle class="progress-ring-circle-small" cx="40" cy="40" r="30"></circle>
-                                    <circle class="progress-ring-progress-small" cx="40" cy="40" r="30" style="stroke-dasharray: ${2 * Math.PI * 30 * parseInt(project.progress) / 100} ${2 * Math.PI * 30}"></circle>
+                                    <circle class="progress-ring-circle-small" cx="25" cy="25" r="20"></circle>
+                                    <circle class="progress-ring-progress-small" cx="25" cy="25" r="20" 
+                                            style="stroke-dasharray: ${2 * Math.PI * 20}; stroke-dashoffset: ${2 * Math.PI * 20 * (1 - parseInt(project.progress) / 100)}; stroke: url(#gradientSmall${index});"></circle>
                                 </svg>
-                                <div style="text-align: center;">
-                                    <div style="font-size: 16px; font-weight: 600; color: white;">${project.progress}</div>
-                                </div>
+                                <div class="progress-ring-text-small">${project.progress.replace('%', '')}</div>
                             </div>
                             <div class="progress-details">
-                                <p>当前阶段: ${(() => {
-                                    const progressValue = parseInt(project.progress);
-                                    // 12个进度步骤，每个步骤对应约8.33%的进度
-                                    const steps = [
-                                        { name: '概念设计', min: 0, max: 8.33 },
-                                        { name: '原型开发', min: 8.33, max: 16.66 },
-                                        { name: '产品打样', min: 16.66, max: 25 },
-                                        { name: '模具开发', min: 25, max: 33.33 },
-                                        { name: '样品测试', min: 33.33, max: 41.66 },
-                                        { name: '模具优化', min: 41.66, max: 50 },
-                                        { name: '工艺参数优化', min: 50, max: 58.33 },
-                                        { name: '丝印 / 外观细节调整', min: 58.33, max: 66.66 },
-                                        { name: '小批量试产', min: 66.66, max: 75 },
-                                        { name: '批量生产', min: 75, max: 83.33 },
-                                        { name: '上市筹备', min: 83.33, max: 91.66 },
-                                        { name: '推广准备', min: 91.66, max: 100 }
-                                    ];
-                                    
-                                    // 查找当前进度对应的步骤
-                                    const currentStep = steps.find(step => progressValue >= step.min && progressValue < step.max) || steps[steps.length - 1];
-                                    return currentStep.name;
-                                })()}</p>
-                                <p ${project.launchDate ? `data-launch-date="${project.launchDate}"` : ''}>上市日期: ${project.launchDate || '未设置'}</p>
+                                <p><strong>进度:</strong> ${project.progress}</p>
+                                ${project.launchDate ? `<p><strong>上市:</strong> ${project.launchDate}</p>` : ''}
                             </div>
                         </div>
                         ${project.remarks && project.remarks.length > 0 ? `
                         <div class="project-card-remarks">
-                            <p class="remark-time">${new Date(project.remarks[project.remarks.length - 1].timestamp).toLocaleString()}</p>
-                            <p>${project.remarks[project.remarks.length - 1].text}</p>
+                            <p>最新备注: ${project.remarks[project.remarks.length - 1].text}</p>
                         </div>
                         ` : ''}
                     </div>
@@ -1565,42 +1838,22 @@ async function exportImage() {
                                 </div>
                             </div>
                             <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px; padding: 15px; background: rgba(255, 120, 0, 0.1); border-radius: 12px; backdrop-filter: blur(10px); border: 1px solid rgba(255, 120, 0, 0.2);">
-                                <div style="position: relative; width: 80px; height: 80px; display: flex; align-items: center; justify-content: center;">
-                                    <svg width="80" height="80">
+                                <div style="position: relative; width: 50px; height: 50px; background: #e6f2ff; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                    <svg width="50" height="50" style="position: absolute; top: 0; left: 0; transform: rotate(-90deg);">
                                         <defs>
-                                            <linearGradient id="progressGradient${index}" x1="0%" y1="0%" x2="100%" y2="100%">
-                                                <stop offset="0%" stop-color="#9c27b0"/>
-                                                <stop offset="100%" stop-color="#1e88e5"/>
+                                            <linearGradient id="gradientSmall${index}" x1="0%" y1="0%" x2="100%" y2="100%">
+                                                <stop offset="0%" stop-color="#667eea" />
+                                                <stop offset="100%" stop-color="#764ba2" />
                                             </linearGradient>
                                         </defs>
-                                        <circle cx="40" cy="40" r="30" fill="none" stroke="#e0e0e0" stroke-width="10" stroke-linejoin="round" stroke-miterlimit="10"></circle>
-                                        <circle cx="40" cy="40" r="30" fill="none" stroke="url(#progressGradient${index})" stroke-width="10" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" style="stroke-dasharray: ${2 * Math.PI * 30 * parseInt(project.progress) / 100} ${2 * Math.PI * 30}"></circle>
+                                        <circle cx="25" cy="25" r="20" fill="none" stroke="#b3d9ff" stroke-width="5" stroke-linecap="round"></circle>
+                                        <circle cx="25" cy="25" r="20" fill="none" stroke="url(#gradientSmall${index})" stroke-width="5" stroke-linecap="round" style="stroke-dasharray: ${2 * Math.PI * 20}; stroke-dashoffset: ${2 * Math.PI * 20 * (1 - parseInt(project.progress) / 100)}"></circle>
                                     </svg>
-                                    <div style="text-align: center; position: absolute;">
-                                        <div style="font-size: 16px; font-weight: 600; color: white;">${project.progress}</div>
-                                    </div>
+                                    <div style="text-align: center; font-size: 12px; font-weight: 700; color: #0066cc; z-index: 1;">${project.progress.replace('%', '')}</div>
                                 </div>
                                 <div style="flex: 1;">
-                                    <p style="margin: 6px 0; font-size: 14px; color: rgba(255, 255, 255, 0.8);">当前阶段: ${(() => {
-                                        const progressValue = parseInt(project.progress);
-                                        const steps = [
-                                            { name: '概念设计', min: 0, max: 8.33 },
-                                            { name: '原型开发', min: 8.33, max: 16.66 },
-                                            { name: '产品打样', min: 16.66, max: 25 },
-                                            { name: '模具开发', min: 25, max: 33.33 },
-                                            { name: '样品测试', min: 33.33, max: 41.66 },
-                                            { name: '模具优化', min: 41.66, max: 50 },
-                                            { name: '工艺参数优化', min: 50, max: 58.33 },
-                                            { name: '丝印 / 外观细节调整', min: 58.33, max: 66.66 },
-                                            { name: '小批量试产', min: 66.66, max: 75 },
-                                            { name: '批量生产', min: 75, max: 83.33 },
-                                            { name: '上市筹备', min: 83.33, max: 91.66 },
-                                            { name: '推广准备', min: 91.66, max: 100 }
-                                        ];
-                                        const currentStep = steps.find(step => progressValue >= step.min && progressValue < step.max) || steps[steps.length - 1];
-                                        return currentStep.name;
-                                    })()}</p>
-                                    <p style="margin: 6px 0; font-size: 14px; color: rgba(255, 255, 255, 0.8);">上市日期: ${project.launchDate || '未设置'}</p>
+                                    <p style="margin: 6px 0; font-size: 14px; color: rgba(255, 255, 255, 0.8);"><strong>进度:</strong> ${project.progress}</p>
+                                    ${project.launchDate ? `<p style="margin: 6px 0; font-size: 14px; color: rgba(255, 255, 255, 0.8);"><strong>上市:</strong> ${project.launchDate}</p>` : ''}
                                 </div>
                             </div>
                             ${project.remarks && project.remarks.length > 0 ? `
@@ -1714,7 +1967,11 @@ function exportProjectData() {
         URL.revokeObjectURL(link.href);
     }, 100);
     
+    // 更新最后导出时间
+    updateLastExportTime();
+    
     alert('项目数据导出成功');
+    console.log('项目数据已导出，最后导出时间已更新');
 }
 
 // 导入项目数据
@@ -1947,6 +2204,7 @@ function filterProjects(searchTerm) {
                             <circle class="progress-ring-progress-small" cx="25" cy="25" r="20" 
                                     style="stroke-dasharray: ${2 * Math.PI * 20}; stroke-dashoffset: ${2 * Math.PI * 20 * (1 - progressValue / 100)}"></circle>
                         </svg>
+                        <div class="progress-ring-text-small">${project.progress.replace('%', '')}</div>
                     </div>
                     <div class="progress-details">
                         <p><strong>进度:</strong> ${project.progress}</p>
@@ -1959,9 +2217,9 @@ function filterProjects(searchTerm) {
                 </div>
                 ` : ''}
                 <div class="project-card-actions">
-                    <button class="btn btn-small" onclick="loadProject('${project.id}')">编辑</button>
-                    <button class="btn btn-small" onclick="deleteProject('${project.id}')">删除</button>
-                    <button class="btn btn-small" onclick="showDetails('${project.id}')">详情</button>
+                    <button class="btn btn-secondary btn-small" onclick="loadProject('${project.id}')">编辑</button>
+                    <button class="btn btn-danger btn-small" onclick="deleteProject('${project.id}')">删除</button>
+                    <button class="btn btn-secondary btn-small" onclick="showDetails('${project.id}')">详情</button>
                 </div>
             </div>
         `;
@@ -1985,9 +2243,6 @@ function updateProjectList() {
     const sortBy = document.getElementById('sortBy')?.value || 'default';
     sortProjects(sortBy);
 }
-
-// 当前编辑的项目ID
-let currentEditProjectId = null;
 
 // 加载项目
 function loadProject(id) {
@@ -2025,8 +2280,19 @@ function loadProject(id) {
         document.getElementById('progressFill').style.width = `${progress}%`;
         document.getElementById('progressPercentage').textContent = project.progress;
         
-        // 滚动到表单顶部
-        document.querySelector('.form-section').scrollIntoView({ behavior: 'smooth' });
+        // 更新圆形进度条
+        const circularProgressFill = document.getElementById('circularProgressFill');
+        if (circularProgressFill) {
+            const dashOffset = 226 - (226 * progress / 100);
+            circularProgressFill.style.strokeDashoffset = dashOffset;
+            const circularProgressText = circularProgressFill.parentElement.nextElementSibling;
+            if (circularProgressText) {
+                circularProgressText.textContent = project.progress;
+            }
+        }
+        
+        // 显示弹窗
+        showProjectModal();
     }
 }
 
@@ -2035,59 +2301,62 @@ async function deleteProject(id) {
     if (confirm('确定要删除这个项目吗？')) {
         projects = projects.filter(p => p.id !== id);
         
-        // 保存到IndexedDB
+        // 保存到SQLite
         try {
-            await saveToIndexedDB(projects);
-            console.log('IndexedDB删除项目成功');
+            await saveToSQLite(projects);
+            console.log('SQLite删除项目成功');
         } catch (dbError) {
-            console.error('IndexedDB删除失败:', dbError);
-            // 降级到localStorage
+            console.error('SQLite删除失败:', dbError);
+        }
+        
+        // 无论SQLite保存是否成功，都保存到localStorage
+        try {
             localStorage.setItem('projects', JSON.stringify(projects));
             console.log('本地存储删除项目成功');
+        } catch (storageError) {
+            console.error('本地存储保存失败:', storageError);
         }
         
         updateProjectList();
     }
 }
 
-// 从IndexedDB加载项目
+// 从SQLite加载项目
 async function loadProjects() {
     try {
-        // 首先尝试从IndexedDB加载
-        const dbProjects = await loadFromIndexedDB();
-        if (dbProjects && dbProjects.length > 0) {
-            projects = dbProjects;
-            console.log('从IndexedDB加载项目成功');
+        // 首先尝试从localStorage加载
+        const storedProjects = localStorage.getItem('projects');
+        if (storedProjects) {
+            projects = JSON.parse(storedProjects);
+            console.log('从localStorage加载项目成功');
         } else {
-            // 如果IndexedDB没有数据，尝试从localStorage加载
-            const storedProjects = localStorage.getItem('projects');
-            if (storedProjects) {
-                projects = JSON.parse(storedProjects);
-                console.log('从localStorage加载项目成功');
-                // 同时保存到IndexedDB
-                try {
-                    await saveToIndexedDB(projects);
-                    console.log('项目数据同步到IndexedDB成功');
-                } catch (e) {
-                    console.error('同步到IndexedDB失败:', e);
-                }
+            // 如果localStorage没有数据，尝试从SQLite加载
+            const sqliteProjects = await loadFromSQLite();
+            if (sqliteProjects && sqliteProjects.length > 0) {
+                projects = sqliteProjects;
+                console.log('从SQLite加载项目成功');
+                // 同时保存到localStorage
+                localStorage.setItem('projects', JSON.stringify(projects));
+                console.log('项目数据同步到localStorage成功');
             } else {
-                // 如果localStorage也没有数据，尝试从文件系统加载
-                console.log('尝试从文件系统加载项目数据');
-                // 注意：在浏览器环境中，我们无法自动从本地文件系统读取文件
-                // 需要用户手动选择文件
+                // 如果所有存储都失败，初始化空数组
+                projects = [];
+                console.log('初始化空项目数组');
             }
         }
         updateProjectList();
     } catch (error) {
         console.error('加载项目时出错:', error);
-        // 降级到localStorage
-        const storedProjects = localStorage.getItem('projects');
-        if (storedProjects) {
-            projects = JSON.parse(storedProjects);
-            updateProjectList();
-        }
+        // 降级到空数组
+        projects = [];
+        updateProjectList();
     }
+}
+
+// 提示从数据文件夹加载
+function promptLoadFromDataFolder() {
+    // 直接返回，不显示提示
+    return;
 }
 
 // 从database文件夹加载项目数据
@@ -2182,10 +2451,6 @@ function showDetails(projectId) {
     
     let detailsHTML = `
         <div class="history-modal">
-            <div class="history-modal-header">
-                <h2>📋 ${project.name} - 项目详情</h2>
-                <p class="history-subtitle">共 ${project.history ? project.history.length : 0} 条历史记录</p>
-            </div>
             <div class="history-modal-content">
                 <!-- 项目图片 -->
                 <div class="project-details-images">
@@ -2374,12 +2639,17 @@ function showDetails(projectId) {
     
     // 创建模态框
     const modal = document.createElement('div');
-    modal.className = 'modal history-modal-container';
+    modal.className = 'modal';
     modal.style.display = 'block';
     modal.innerHTML = `
-        <div class="history-modal-dialog">
-            <span class="close" onclick="this.parentElement.parentElement.remove()">&times;</span>
-            ${detailsHTML}
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>📋 ${project.name} - 项目详情</h2>
+                <button class="btn-close" onclick="this.parentElement.parentElement.parentElement.remove()">&times;</button>
+            </div>
+            <div class="modal-body">
+                ${detailsHTML}
+            </div>
         </div>
     `;
     
@@ -2396,98 +2666,24 @@ function showDetails(projectId) {
 // 添加历史记录的CSS样式
 const style = document.createElement('style');
 style.textContent = `
-    /* 深色宝蓝色系主题变量 */
-    :root {
-        --primary-bg: #0a1128;
-        --secondary-bg: #121c38;
-        --card-bg: #1a2542;
-        --accent-color: #00d4ff;
-        --text-primary: #ffffff;
-        --text-secondary: #b0b8d4;
-        --border-color: #2a395f;
-        --success-color: #00ff9f;
-        --warning-color: #ffaa00;
-        --danger-color: #ff3d71;
-    }
-    
-    .history-modal-container {
-        background: rgba(0, 10, 30, 0.8);
-        backdrop-filter: blur(10px);
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-    }
-    
-    .history-modal-dialog {
-        background: var(--card-bg);
-        border-radius: 16px;
-        max-width: 90%;
-        width: 100%;
-        max-height: 90vh;
-        overflow: hidden;
-        position: relative;
-        box-shadow: 0 20px 60px rgba(0, 212, 255, 0.2);
-        animation: modalFadeIn 0.3s ease-out;
-        border: 1px solid rgba(255, 255, 255, 0.05);
-    }
-    
-    @keyframes modalFadeIn {
-        from {
-            opacity: 0;
-            transform: scale(0.9) translateY(-20px);
-        }
-        to {
-            opacity: 1;
-            transform: scale(1) translateY(0);
-        }
-    }
-    
-    .history-modal-header {
-        padding: 25px 30px;
-        background: linear-gradient(135deg, var(--primary-bg), var(--secondary-bg));
-        color: var(--text-primary);
-        border-bottom: 1px solid var(--border-color);
-    }
-    
-    .history-modal-header h2 {
-        margin: 0 0 5px 0;
-        font-size: 24px;
-        background: linear-gradient(90deg, var(--accent-color), #7928ca);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-    }
-    
-    .history-subtitle {
-        margin: 0;
-        opacity: 0.9;
-        font-size: 14px;
-        color: var(--text-secondary);
-    }
-    
     .history-modal-content {
-        max-height: calc(90vh - 120px);
+        max-height: calc(70vh - 120px);
         overflow-y: auto;
-        padding: 20px 30px 30px;
     }
     
     .history-empty {
-        text-align: center;
-        padding: 50px;
-        color: var(--text-secondary);
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 12px;
-    }
-    
-    .history-entry {
-        background: rgba(255, 255, 255, 0.05);
-        border: 2px solid var(--border-color);
-        border-radius: 12px;
+    text-align: center;
+    padding: 50px;
+    color: var(--text-secondary);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 100%);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.history-entry {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
         padding: 15px 20px;
         margin-bottom: 15px;
         transition: all 0.3s ease;
