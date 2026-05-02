@@ -4,16 +4,26 @@ const SUPABASE_ANON_KEY = 'sb_publishable__buesO2Qc5sXtLvBkLQpuQ_6dfF7z6u';
 
 // 初始化Supabase客户端
 let supabase = null;
-try {
-    if (typeof window !== 'undefined' && window.supabase) {
-        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        console.log('Supabase客户端初始化成功');
-    } else {
-        console.warn('Supabase SDK未加载');
+let supabaseInitialized = false;
+
+function initSupabaseClient() {
+    try {
+        if (typeof window !== 'undefined' && window.supabase) {
+            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            supabaseInitialized = true;
+            console.log('Supabase客户端初始化成功');
+        } else {
+            console.warn('Supabase SDK未加载，尝试延迟初始化...');
+            // 延迟检查，等待SDK加载
+            setTimeout(initSupabaseClient, 1000);
+        }
+    } catch (error) {
+        console.error('Supabase初始化失败:', error);
     }
-} catch (error) {
-    console.error('Supabase初始化失败:', error);
 }
+
+// 立即尝试初始化
+initSupabaseClient();
 
 // 全局变量
 let uploadedImages = [];

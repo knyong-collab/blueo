@@ -241,6 +241,27 @@ small {
     box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
 }
 
+/* 登录注册切换链接 */
+.form-switch {
+    text-align: center;
+    margin-top: 15px;
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.form-switch a {
+    color: var(--accent-color);
+    text-decoration: none;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.form-switch a:hover {
+    color: var(--text-primary);
+    text-decoration: underline;
+}
+
 /* 主应用容器 */
 .container {
     max-width: 1400px;
