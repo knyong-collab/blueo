@@ -2,14 +2,19 @@
 const SUPABASE_URL = 'https://rbknbetkdbnlejtaykuq.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable__buesO2Qc5sXtLvBkLQpuQ_6dfF7z6u';
 
-// 初始化Supabase客户端
-let supabase = null;
+// Supabase客户端实例
+let supabaseClient = null;
 let supabaseInitialized = false;
 
 function initSupabaseClient() {
     try {
+        // 等待supabase全局对象可用
         if (typeof window !== 'undefined' && window.supabase) {
-            supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            // 创建supabase客户端实例
+            if (!window.supabaseInstance) {
+                window.supabaseInstance = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            }
+            supabaseClient = window.supabaseInstance;
             supabaseInitialized = true;
             console.log('Supabase客户端初始化成功');
         } else {
@@ -47,10 +52,10 @@ const DEFAULT_USERS = {
 
 // 检查是否已登录
 async function checkLoginStatus() {
-    if (!supabase) return false;
+    if (!supabaseClient) return false;
     
     try {
-        const { data: { session } } = await supabase.auth.getSession();
+        const { data: { session } } = await supabaseClient.auth.getSession();
         if (session) {
             currentUser = session.user;
             return true;
@@ -63,13 +68,13 @@ async function checkLoginStatus() {
 
 // 使用Supabase登录
 async function login(email, password) {
-    if (!supabase) {
+    if (!supabaseClient) {
         alert('Supabase未初始化，请检查网络连接');
         return false;
     }
     
     try {
-        const { data, error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabaseClient.auth.signInWithPassword({
             email: email,
             password: password
         });
@@ -93,13 +98,13 @@ async function login(email, password) {
 
 // 使用Supabase注册
 async function register(email, password) {
-    if (!supabase) {
+    if (!supabaseClient) {
         alert('Supabase未初始化，请检查网络连接');
         return false;
     }
     
     try {
-        const { data, error } = await supabase.auth.signUp({
+        const { data, error } = await supabaseClient.auth.signUp({
             email: email,
             password: password
         });
@@ -122,9 +127,9 @@ async function register(email, password) {
 
 // 退出登录
 async function logout() {
-    if (supabase) {
+    if (supabaseClient) {
         try {
-            await supabase.auth.signOut();
+            await supabaseClient.auth.signOut();
         } catch (error) {
             console.error('退出登录失败:', error);
         }
@@ -371,14 +376,7 @@ function checkBackupStatus() {
     const lastExport = localStorage.getItem('lastExport');
     const today = new Date();
     
-    if (!lastExport) {
-        // 首次使用，提醒用户
-        setTimeout(() => {
-            if (confirm('欢迎使用蓝橙产品开发项目管理系统！\n\n为了确保数据安全，建议您定期导出项目数据。\n\n是否现在导出数据？')) {
-                exportProjectData();
-            }
-        }, 3000);
-    } else {
+    if (lastExport) {
         // 检查是否超过7天未导出
         const lastExportDate = new Date(lastExport);
         const daysSinceExport = (today - lastExportDate) / (1000 * 60 * 60 * 24);
@@ -491,7 +489,7 @@ async function initializeApp() {
     updateUserDisplay();
     
     // 初始化Supabase实时同步
-    if (supabase) {
+    if (supabaseClient) {
         initSupabaseRealtime();
     }
     
@@ -502,7 +500,7 @@ async function initializeApp() {
 
 // 保存项目到Supabase
 async function saveToSupabase(project) {
-    if (!supabase) {
+    if (!supabaseClient) {
         console.warn('Supabase未初始化，跳过保存');
         return false;
     }
@@ -527,7 +525,7 @@ async function saveToSupabase(project) {
         };
         
         // 检查项目是否已存在
-        const { data: existingProject } = await supabase
+        const { data: existingProject } = await supabaseClient
             .from('projects')
             .select('id')
             .eq('id', project.id)
@@ -535,7 +533,7 @@ async function saveToSupabase(project) {
         
         if (existingProject) {
             // 更新现有项目
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('projects')
                 .update(projectData)
                 .eq('id', project.id);
@@ -543,7 +541,7 @@ async function saveToSupabase(project) {
             if (error) throw error;
         } else {
             // 插入新项目
-            const { error } = await supabase
+            const { error } = await supabaseClient
                 .from('projects')
                 .insert([projectData]);
             
@@ -565,13 +563,13 @@ async function saveToSupabase(project) {
 
 // 从Supabase加载项目
 async function loadFromSupabase() {
-    if (!supabase) {
+    if (!supabaseClient) {
         console.warn('Supabase未初始化，跳过加载');
         return [];
     }
     
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('projects')
             .select('*')
             .order('created_at', { ascending: false });
@@ -606,13 +604,13 @@ async function loadFromSupabase() {
 
 // 从Supabase删除项目
 async function deleteFromSupabase(projectId) {
-    if (!supabase) {
+    if (!supabaseClient) {
         console.warn('Supabase未初始化，跳过删除');
         return false;
     }
     
     try {
-        const { error } = await supabase
+        const { error } = await supabaseClient
             .from('projects')
             .delete()
             .eq('id', projectId);
@@ -629,10 +627,10 @@ async function deleteFromSupabase(projectId) {
 
 // 记录项目操作历史
 async function logProjectHistory(projectId, action) {
-    if (!supabase || !currentUser) return;
+    if (!supabaseClient || !currentUser) return;
     
     try {
-        const { error } = await supabase
+        const { error } = await supabaseClient
             .from('project_history')
             .insert([{
                 project_id: projectId,
@@ -649,11 +647,11 @@ async function logProjectHistory(projectId, action) {
 
 // 初始化Supabase实时同步
 function initSupabaseRealtime() {
-    if (!supabase) return;
+    if (!supabaseClient) return;
     
     try {
         // 监听projects表的变化
-        const channel = supabase
+        const channel = supabaseClient
             .channel('public:projects')
             .on('postgres_changes', {
                 event: '*',
