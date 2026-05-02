@@ -279,6 +279,44 @@ small {
     align-items: center;
 }
 
+/* 在线用户显示 */
+.online-users {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.online-indicator {
+    width: 10px;
+    height: 10px;
+    background: var(--success-color);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+    box-shadow: 0 0 10px var(--success-color);
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.7;
+        transform: scale(1.1);
+    }
+}
+
+#currentUserDisplay {
+    font-size: 14px;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
 /* 按钮样式 */
 .btn {
     padding: 12px 24px;

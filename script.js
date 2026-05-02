@@ -1,8 +1,26 @@
+// Supabase配置
+const SUPABASE_URL = 'https://rbknbetkdbnlejtaykuq.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable__buesO2Qc5sXtLvBkLQpuQ_6dfF7z6u';
+
+// 初始化Supabase客户端
+let supabase = null;
+try {
+    if (typeof window !== 'undefined' && window.supabase) {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        console.log('Supabase客户端初始化成功');
+    } else {
+        console.warn('Supabase SDK未加载');
+    }
+} catch (error) {
+    console.error('Supabase初始化失败:', error);
+}
+
 // 全局变量
 let uploadedImages = [];
 let currentProject = null;
 let projects = [];
 let currentEditProjectId = null;
+let currentUser = null;
 
 // 数据库路径
 const DB_PATH = 'database/projects.json';
@@ -18,26 +36,99 @@ const DEFAULT_USERS = {
 };
 
 // 检查是否已登录
-function checkLoginStatus() {
-    const isLoggedIn = sessionStorage.getItem('isLoggedIn');
-    return isLoggedIn === 'true';
+async function checkLoginStatus() {
+    if (!supabase) return false;
+    
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+            currentUser = session.user;
+            return true;
+        }
+    } catch (error) {
+        console.error('检查登录状态失败:', error);
+    }
+    return false;
 }
 
-// 登录验证
-function login(username, password) {
-    if (DEFAULT_USERS[username] && DEFAULT_USERS[username] === password) {
-        sessionStorage.setItem('isLoggedIn', 'true');
-        sessionStorage.setItem('currentUser', username);
-        return true;
+// 使用Supabase登录
+async function login(email, password) {
+    if (!supabase) {
+        alert('Supabase未初始化，请检查网络连接');
+        return false;
+    }
+    
+    try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email: email,
+            password: password
+        });
+        
+        if (error) {
+            alert('登录失败: ' + error.message);
+            return false;
+        }
+        
+        if (data.user) {
+            currentUser = data.user;
+            updateUserDisplay();
+            return true;
+        }
+    } catch (error) {
+        console.error('登录失败:', error);
+        alert('登录失败，请稍后重试');
+    }
+    return false;
+}
+
+// 使用Supabase注册
+async function register(email, password) {
+    if (!supabase) {
+        alert('Supabase未初始化，请检查网络连接');
+        return false;
+    }
+    
+    try {
+        const { data, error } = await supabase.auth.signUp({
+            email: email,
+            password: password
+        });
+        
+        if (error) {
+            alert('注册失败: ' + error.message);
+            return false;
+        }
+        
+        if (data.user) {
+            alert('注册成功！请检查邮箱进行验证。');
+            return true;
+        }
+    } catch (error) {
+        console.error('注册失败:', error);
+        alert('注册失败，请稍后重试');
     }
     return false;
 }
 
 // 退出登录
-function logout() {
-    sessionStorage.removeItem('isLoggedIn');
-    sessionStorage.removeItem('currentUser');
+async function logout() {
+    if (supabase) {
+        try {
+            await supabase.auth.signOut();
+        } catch (error) {
+            console.error('退出登录失败:', error);
+        }
+    }
+    currentUser = null;
     showLoginScreen();
+}
+
+// 更新用户显示
+function updateUserDisplay() {
+    const userDisplay = document.getElementById('currentUserDisplay');
+    if (userDisplay && currentUser) {
+        userDisplay.textContent = '当前用户：' + (currentUser.email || '匿名用户');
+    }
 }
 
 // 初始化SQLite数据库
@@ -250,7 +341,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     await initSQLite();
     
     // 检查登录状态
-    if (checkLoginStatus()) {
+    const isLoggedIn = await checkLoginStatus();
+    if (isLoggedIn) {
         showMainApp();
         initializeApp();
     } else {
@@ -299,17 +391,60 @@ function updateLastExportTime() {
 // 初始化登录表单
 function initializeLoginForm() {
     const loginForm = document.getElementById('loginForm');
-    loginForm.addEventListener('submit', function(e) {
+    const registerForm = document.getElementById('registerForm');
+    const showRegister = document.getElementById('showRegister');
+    const showLogin = document.getElementById('showLogin');
+    
+    // 登录表单
+    loginForm.addEventListener('submit', async function(e) {
         e.preventDefault();
-        const username = document.getElementById('username').value;
+        const email = document.getElementById('email').value;
         const password = document.getElementById('password').value;
         
-        if (login(username, password)) {
+        const success = await login(email, password);
+        if (success) {
             showMainApp();
             initializeApp();
-        } else {
-            alert('用户名或密码错误！');
         }
+    });
+    
+    // 注册表单
+    registerForm.addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const email = document.getElementById('regEmail').value;
+        const password = document.getElementById('regPassword').value;
+        const confirmPassword = document.getElementById('regConfirmPassword').value;
+        
+        if (password !== confirmPassword) {
+            alert('两次输入的密码不一致！');
+            return;
+        }
+        
+        if (password.length < 6) {
+            alert('密码长度至少为6位！');
+            return;
+        }
+        
+        const success = await register(email, password);
+        if (success) {
+            // 注册成功后切换回登录表单
+            loginForm.style.display = 'block';
+            registerForm.style.display = 'none';
+        }
+    });
+    
+    // 切换到注册表单
+    showRegister.addEventListener('click', function(e) {
+        e.preventDefault();
+        loginForm.style.display = 'none';
+        registerForm.style.display = 'block';
+    });
+    
+    // 切换到登录表单
+    showLogin.addEventListener('click', function(e) {
+        e.preventDefault();
+        loginForm.style.display = 'block';
+        registerForm.style.display = 'none';
     });
 }
 
@@ -326,7 +461,189 @@ async function initializeApp() {
         logoutBtn.addEventListener('click', logout);
     }
     
+    // 更新用户显示
+    updateUserDisplay();
+    
+    // 初始化Supabase实时同步
+    if (supabase) {
+        initSupabaseRealtime();
+    }
+    
     await loadProjects();
+}
+
+// ============ Supabase数据存储函数 ============
+
+// 保存项目到Supabase
+async function saveToSupabase(project) {
+    if (!supabase) {
+        console.warn('Supabase未初始化，跳过保存');
+        return false;
+    }
+    
+    try {
+        // 准备项目数据
+        const projectData = {
+            id: project.id,
+            name: project.name,
+            brand: project.brand,
+            category: project.category,
+            product_type: project.productType,
+            status: project.status,
+            priority: project.priority,
+            progress: project.progress,
+            launch_date: project.launchDate,
+            images: JSON.stringify(project.images || []),
+            remarks: JSON.stringify(project.remarks || []),
+            history: JSON.stringify(project.history || []),
+            created_at: project.createdAt,
+            updated_at: new Date().toISOString()
+        };
+        
+        // 检查项目是否已存在
+        const { data: existingProject } = await supabase
+            .from('projects')
+            .select('id')
+            .eq('id', project.id)
+            .single();
+        
+        if (existingProject) {
+            // 更新现有项目
+            const { error } = await supabase
+                .from('projects')
+                .update(projectData)
+                .eq('id', project.id);
+            
+            if (error) throw error;
+        } else {
+            // 插入新项目
+            const { error } = await supabase
+                .from('projects')
+                .insert([projectData]);
+            
+            if (error) throw error;
+        }
+        
+        // 记录操作历史
+        if (currentUser) {
+            await logProjectHistory(project.id, existingProject ? 'update' : 'create');
+        }
+        
+        console.log('数据保存到Supabase成功');
+        return true;
+    } catch (error) {
+        console.error('保存到Supabase失败:', error);
+        return false;
+    }
+}
+
+// 从Supabase加载项目
+async function loadFromSupabase() {
+    if (!supabase) {
+        console.warn('Supabase未初始化，跳过加载');
+        return [];
+    }
+    
+    try {
+        const { data, error } = await supabase
+            .from('projects')
+            .select('*')
+            .order('created_at', { ascending: false });
+        
+        if (error) throw error;
+        
+        // 解析JSON字段
+        const projects = data.map(row => ({
+            id: row.id,
+            name: row.name,
+            brand: row.brand,
+            category: row.category,
+            productType: row.product_type,
+            status: row.status,
+            priority: row.priority,
+            progress: row.progress,
+            launchDate: row.launch_date,
+            images: JSON.parse(row.images || '[]'),
+            remarks: JSON.parse(row.remarks || '[]'),
+            history: JSON.parse(row.history || '[]'),
+            createdAt: row.created_at,
+            updatedAt: row.updated_at
+        }));
+        
+        console.log('从Supabase加载项目成功，共', projects.length, '个项目');
+        return projects;
+    } catch (error) {
+        console.error('从Supabase加载失败:', error);
+        return [];
+    }
+}
+
+// 从Supabase删除项目
+async function deleteFromSupabase(projectId) {
+    if (!supabase) {
+        console.warn('Supabase未初始化，跳过删除');
+        return false;
+    }
+    
+    try {
+        const { error } = await supabase
+            .from('projects')
+            .delete()
+            .eq('id', projectId);
+        
+        if (error) throw error;
+        
+        console.log('从Supabase删除项目成功');
+        return true;
+    } catch (error) {
+        console.error('从Supabase删除项目失败:', error);
+        return false;
+    }
+}
+
+// 记录项目操作历史
+async function logProjectHistory(projectId, action) {
+    if (!supabase || !currentUser) return;
+    
+    try {
+        const { error } = await supabase
+            .from('project_history')
+            .insert([{
+                project_id: projectId,
+                user_id: currentUser.id,
+                action: action,
+                created_at: new Date().toISOString()
+            }]);
+        
+        if (error) throw error;
+    } catch (error) {
+        console.error('记录操作历史失败:', error);
+    }
+}
+
+// 初始化Supabase实时同步
+function initSupabaseRealtime() {
+    if (!supabase) return;
+    
+    try {
+        // 监听projects表的变化
+        const channel = supabase
+            .channel('public:projects')
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'projects'
+            }, async (payload) => {
+                console.log('收到Supabase实时更新:', payload);
+                // 重新加载项目数据
+                await loadProjects();
+            })
+            .subscribe();
+        
+        console.log('Supabase实时同步初始化成功');
+    } catch (error) {
+        console.error('Supabase实时同步初始化失败:', error);
+    }
 }
 
 // 初始化图片上传功能
@@ -892,6 +1209,14 @@ async function saveProject() {
             console.log('新项目添加成功');
         }
 
+        // 保存到Supabase（优先）
+        try {
+            await saveToSupabase(project);
+            console.log('Supabase保存成功');
+        } catch (supabaseError) {
+            console.error('Supabase保存失败:', supabaseError);
+        }
+        
         // 保存到SQLite
         try {
             await saveToSQLite(projects);
@@ -900,7 +1225,7 @@ async function saveProject() {
             console.error('SQLite保存失败:', dbError);
         }
         
-        // 无论SQLite保存是否成功，都保存到localStorage
+        // 无论其他保存是否成功，都保存到localStorage
         try {
             // 优化图片数据，限制存储大小
             const optimizedProjects = projects.map(project => {
@@ -2301,6 +2626,14 @@ async function deleteProject(id) {
     if (confirm('确定要删除这个项目吗？')) {
         projects = projects.filter(p => p.id !== id);
         
+        // 从Supabase删除
+        try {
+            await deleteFromSupabase(id);
+            console.log('Supabase删除项目成功');
+        } catch (supabaseError) {
+            console.error('Supabase删除失败:', supabaseError);
+        }
+        
         // 保存到SQLite
         try {
             await saveToSQLite(projects);
@@ -2309,7 +2642,7 @@ async function deleteProject(id) {
             console.error('SQLite删除失败:', dbError);
         }
         
-        // 无论SQLite保存是否成功，都保存到localStorage
+        // 无论其他保存是否成功，都保存到localStorage
         try {
             localStorage.setItem('projects', JSON.stringify(projects));
             console.log('本地存储删除项目成功');
@@ -2321,29 +2654,50 @@ async function deleteProject(id) {
     }
 }
 
-// 从SQLite加载项目
+// 从多个数据源加载项目
 async function loadProjects() {
     try {
-        // 首先尝试从localStorage加载
+        // 首先尝试从Supabase加载
+        const supabaseProjects = await loadFromSupabase();
+        if (supabaseProjects && supabaseProjects.length > 0) {
+            projects = supabaseProjects;
+            console.log('从Supabase加载项目成功');
+            // 同时保存到localStorage作为备份
+            localStorage.setItem('projects', JSON.stringify(projects));
+            updateProjectList();
+            return;
+        }
+        
+        // 如果Supabase没有数据，尝试从localStorage加载
         const storedProjects = localStorage.getItem('projects');
         if (storedProjects) {
             projects = JSON.parse(storedProjects);
             console.log('从localStorage加载项目成功');
-        } else {
-            // 如果localStorage没有数据，尝试从SQLite加载
-            const sqliteProjects = await loadFromSQLite();
-            if (sqliteProjects && sqliteProjects.length > 0) {
-                projects = sqliteProjects;
-                console.log('从SQLite加载项目成功');
-                // 同时保存到localStorage
-                localStorage.setItem('projects', JSON.stringify(projects));
-                console.log('项目数据同步到localStorage成功');
-            } else {
-                // 如果所有存储都失败，初始化空数组
-                projects = [];
-                console.log('初始化空项目数组');
+            // 同步到Supabase
+            for (const project of projects) {
+                await saveToSupabase(project);
             }
+            updateProjectList();
+            return;
         }
+        
+        // 如果localStorage没有数据，尝试从SQLite加载
+        const sqliteProjects = await loadFromSQLite();
+        if (sqliteProjects && sqliteProjects.length > 0) {
+            projects = sqliteProjects;
+            console.log('从SQLite加载项目成功');
+            // 同时保存到localStorage和Supabase
+            localStorage.setItem('projects', JSON.stringify(projects));
+            for (const project of projects) {
+                await saveToSupabase(project);
+            }
+            updateProjectList();
+            return;
+        }
+        
+        // 如果所有存储都失败，初始化空数组
+        projects = [];
+        console.log('初始化空项目数组');
         updateProjectList();
     } catch (error) {
         console.error('加载项目时出错:', error);
