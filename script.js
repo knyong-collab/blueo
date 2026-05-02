@@ -13,12 +13,12 @@ function initSupabaseClient() {
             supabaseInitialized = true;
             console.log('Supabase客户端初始化成功');
         } else {
-            console.warn('Supabase SDK未加载，尝试延迟初始化...');
-            // 延迟检查，等待SDK加载
-            setTimeout(initSupabaseClient, 1000);
+            console.warn('Supabase SDK未加载，将使用离线模式');
+            supabaseInitialized = false;
         }
     } catch (error) {
         console.error('Supabase初始化失败:', error);
+        supabaseInitialized = false;
     }
 }
 
@@ -400,10 +400,22 @@ function updateLastExportTime() {
 
 // 初始化登录表单
 function initializeLoginForm() {
+    console.log('initializeLoginForm 开始执行');
+    
     const loginForm = document.getElementById('loginForm');
     const registerForm = document.getElementById('registerForm');
     const showRegister = document.getElementById('showRegister');
     const showLogin = document.getElementById('showLogin');
+    
+    console.log('loginForm:', loginForm);
+    console.log('registerForm:', registerForm);
+    console.log('showRegister:', showRegister);
+    console.log('showLogin:', showLogin);
+    
+    if (!loginForm || !registerForm || !showRegister || !showLogin) {
+        console.error('某些元素未找到!');
+        return;
+    }
     
     // 登录表单
     loginForm.addEventListener('submit', async function(e) {
@@ -445,6 +457,7 @@ function initializeLoginForm() {
     
     // 切换到注册表单
     showRegister.addEventListener('click', function(e) {
+        console.log('showRegister clicked');
         e.preventDefault();
         loginForm.style.display = 'none';
         registerForm.style.display = 'block';
@@ -452,10 +465,13 @@ function initializeLoginForm() {
     
     // 切换到登录表单
     showLogin.addEventListener('click', function(e) {
+        console.log('showLogin clicked');
         e.preventDefault();
         loginForm.style.display = 'block';
         registerForm.style.display = 'none';
     });
+    
+    console.log('initializeLoginForm 执行完成');
 }
 
 // 初始化应用
