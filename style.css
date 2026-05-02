@@ -300,6 +300,100 @@ small {
     align-items: center;
 }
 
+/* 同步状态显示 */
+.sync-status {
+    padding: 8px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.3s ease;
+}
+
+.sync-status.online {
+    background: rgba(0, 255, 159, 0.15);
+    color: var(--success-color);
+}
+
+.sync-status.offline {
+    background: rgba(255, 61, 113, 0.15);
+    color: var(--danger-color);
+}
+
+/* 同步通知 */
+.sync-notification {
+    position: fixed;
+    bottom: 30px;
+    right: 30px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 100%);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 16px;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    z-index: 10000;
+    animation: slideInRight 0.3s ease-out;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.sync-notification-icon {
+    font-size: 24px;
+    animation: spin 2s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.sync-notification-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.sync-notification-title {
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.sync-notification-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.sync-notification-close {
+    font-size: 20px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0 8px;
+    transition: color 0.2s ease;
+    line-height: 1;
+}
+
+.sync-notification-close:hover {
+    color: var(--text-primary);
+}
+
 /* 在线用户显示 */
 .online-users {
     display: flex;

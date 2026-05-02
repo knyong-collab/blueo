@@ -645,28 +645,165 @@ async function logProjectHistory(projectId, action) {
     }
 }
 
+// 实时同步通道引用
+let realtimeChannel = null;
+
 // 初始化Supabase实时同步
 function initSupabaseRealtime() {
-    if (!supabaseClient) return;
+    if (!supabaseClient) {
+        console.warn('Supabase未初始化，延迟启动实时同步');
+        setTimeout(initSupabaseRealtime, 2000);
+        return;
+    }
+    
+    // 如果已有通道，先关闭
+    if (realtimeChannel) {
+        supabaseClient.removeChannel(realtimeChannel);
+    }
     
     try {
-        // 监听projects表的变化
-        const channel = supabaseClient
-            .channel('public:projects')
+        // 创建实时通道，添加唯一标识符
+        realtimeChannel = supabaseClient
+            .channel(`public:projects:${Date.now()}`)
             .on('postgres_changes', {
                 event: '*',
                 schema: 'public',
                 table: 'projects'
             }, async (payload) => {
-                console.log('收到Supabase实时更新:', payload);
-                // 重新加载项目数据
-                await loadProjects();
+                console.log('收到Supabase实时更新:', payload.eventType, payload.new.id);
+                
+                // 检查是否是当前用户自己的修改
+                if (isOwnUpdate(payload.new.id)) {
+                    console.log('跳过自己的更新');
+                    return;
+                }
+                
+                // 更新通知
+                showSyncNotification(payload);
+                
+                // 智能更新：只更新变化的项目
+                await smartUpdateProject(payload);
             })
-            .subscribe();
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log('✅ 实时同步已连接');
+                    showConnectionStatus(true);
+                } else {
+                    console.warn('⚠️ 实时同步状态:', status);
+                }
+            });
         
         console.log('Supabase实时同步初始化成功');
     } catch (error) {
         console.error('Supabase实时同步初始化失败:', error);
+        showConnectionStatus(false);
+        // 自动重试
+        setTimeout(initSupabaseRealtime, 5000);
+    }
+}
+
+// 检查是否是自己的更新
+let pendingUpdates = new Set();
+
+function markOwnUpdate(projectId) {
+    pendingUpdates.add(projectId);
+    // 5秒后清除标记
+    setTimeout(() => {
+        pendingUpdates.delete(projectId);
+    }, 5000);
+}
+
+function isOwnUpdate(projectId) {
+    return pendingUpdates.has(projectId);
+}
+
+// 智能更新项目
+async function smartUpdateProject(payload) {
+    try {
+        const projectId = payload.new.id;
+        
+        // 查找本地项目索引
+        const localIndex = projects.findIndex(p => p.id === projectId);
+        
+        if (payload.eventType === 'DELETE') {
+            // 删除操作
+            if (localIndex !== -1) {
+                projects.splice(localIndex, 1);
+                updateProjectList();
+            }
+        } else {
+            // 插入或更新操作
+            const updatedProject = {
+                id: payload.new.id,
+                name: payload.new.name,
+                brand: payload.new.brand,
+                category: payload.new.category,
+                productType: payload.new.product_type,
+                status: payload.new.status,
+                priority: payload.new.priority,
+                progress: payload.new.progress,
+                launchDate: payload.new.launch_date,
+                images: JSON.parse(payload.new.images || '[]'),
+                remarks: JSON.parse(payload.new.remarks || '[]'),
+                history: JSON.parse(payload.new.history || '[]'),
+                createdAt: payload.new.created_at,
+                updatedAt: payload.new.updated_at
+            };
+            
+            if (localIndex !== -1) {
+                // 更新现有项目
+                projects[localIndex] = updatedProject;
+            } else {
+                // 添加新项目
+                projects.unshift(updatedProject);
+            }
+            
+            updateProjectList();
+        }
+    } catch (error) {
+        console.error('智能更新失败:', error);
+        // 降级为全量刷新
+        await loadProjects();
+    }
+}
+
+// 显示同步通知
+function showSyncNotification(payload) {
+    const notification = document.createElement('div');
+    notification.className = 'sync-notification';
+    
+    const eventText = {
+        INSERT: '新增了项目',
+        UPDATE: '更新了项目',
+        DELETE: '删除了项目'
+    };
+    
+    notification.innerHTML = `
+        <div class="sync-notification-icon">🔄</div>
+        <div class="sync-notification-content">
+            <div class="sync-notification-title">${eventText[payload.eventType]}</div>
+            <div class="sync-notification-name">${payload.new?.name || '项目'}</div>
+        </div>
+        <div class="sync-notification-close" onclick="this.parentElement.remove()">×</div>
+    `;
+    
+    document.body.appendChild(notification);
+    
+    // 3秒后自动消失
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.style.opacity = '0';
+            setTimeout(() => notification.remove(), 300);
+        }
+    }, 3000);
+}
+
+// 更新连接状态显示
+function showConnectionStatus(isConnected) {
+    const statusElement = document.getElementById('syncStatus');
+    if (statusElement) {
+        statusElement.textContent = isConnected ? '🟢 实时同步中' : '🔴 离线模式';
+        statusElement.className = isConnected ? 'sync-status online' : 'sync-status offline';
     }
 }
 
@@ -1232,6 +1369,9 @@ async function saveProject() {
             projects.push(project);
             console.log('新项目添加成功');
         }
+
+        // 标记这是自己的更新，避免实时同步重复处理
+        markOwnUpdate(project.id);
 
         // 保存到Supabase（优先）
         try {
@@ -2649,6 +2789,9 @@ function loadProject(id) {
 async function deleteProject(id) {
     if (confirm('确定要删除这个项目吗？')) {
         projects = projects.filter(p => p.id !== id);
+        
+        // 标记这是自己的删除操作，避免实时同步重复处理
+        markOwnUpdate(id);
         
         // 从Supabase删除
         try {
