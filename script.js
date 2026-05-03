@@ -141,13 +141,6 @@ let projects = [];
 let currentEditProjectId = null;
 let currentUser = null;
 
-// 数据库路径
-const DB_PATH = 'database/projects.json';
-const IMAGES_PATH = 'database/images/';
-
-// SQLite数据库
-let db = null;
-
 // 登录用户信息
 const DEFAULT_USERS = {
     'BLUEO': 'BLUEO123123',
@@ -250,47 +243,6 @@ function updateUserDisplay() {
     }
 }
 
-// 初始化SQLite数据库
-async function initSQLite() {
-    try {
-        // 加载SQLite WASM文件
-        const SQL = await initSqlJs({
-            locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${file}`
-        });
-        
-        // 创建内存数据库
-        db = new SQL.Database();
-        
-        // 创建项目表
-        db.run(`
-            CREATE TABLE IF NOT EXISTS projects (
-                id TEXT PRIMARY KEY,
-                name TEXT,
-                description TEXT,
-                status TEXT,
-                progress INTEGER,
-                priority TEXT,
-                category TEXT,
-                startDate TEXT,
-                launchDate TEXT,
-                currentStage TEXT,
-                manager TEXT,
-                team TEXT,
-                budget TEXT,
-                images TEXT,
-                remarks TEXT,
-                history TEXT,
-                createdAt TEXT,
-                updatedAt TEXT
-            );
-        `);
-        
-        console.log('SQLite数据库初始化成功');
-    } catch (error) {
-        console.error('SQLite初始化失败:', error);
-    }
-}
-
 // 显示登录界面
 function showLoginScreen() {
     document.getElementById('loginScreen').style.display = 'flex';
@@ -301,92 +253,6 @@ function showLoginScreen() {
 function showMainApp() {
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('mainApp').style.display = 'block';
-}
-
-// 保存项目到SQLite
-async function saveToSQLite(projects) {
-    if (!db) {
-        console.warn('SQLite未初始化，跳过保存');
-        return;
-    }
-    
-    try {
-        // 开启事务
-        db.run('BEGIN TRANSACTION');
-        
-        // 清空表
-        db.run('DELETE FROM projects');
-        
-        // 插入项目数据
-        const stmt = db.prepare(`
-            INSERT INTO projects (
-                id, name, description, status, progress, priority, category, 
-                startDate, launchDate, currentStage, manager, team, budget, 
-                images, remarks, history, createdAt, updatedAt
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-        
-        for (const project of projects) {
-            stmt.run(
-                project.id,
-                project.name,
-                project.description,
-                project.status,
-                project.progress,
-                project.priority,
-                project.category,
-                project.startDate,
-                project.launchDate,
-                project.currentStage,
-                project.manager,
-                project.team,
-                project.budget,
-                JSON.stringify(project.images || []),
-                JSON.stringify(project.remarks || []),
-                JSON.stringify(project.history || []),
-                project.createdAt,
-                project.updatedAt
-            );
-        }
-        
-        stmt.free();
-        db.run('COMMIT');
-        
-        console.log('数据保存到SQLite成功');
-    } catch (error) {
-        console.error('保存到SQLite失败:', error);
-        // 回滚事务
-        db.run('ROLLBACK');
-    }
-}
-
-// 从SQLite加载项目
-async function loadFromSQLite() {
-    if (!db) {
-        console.warn('SQLite未初始化，跳过加载');
-        return [];
-    }
-    
-    try {
-        const projects = [];
-        const stmt = db.prepare('SELECT * FROM projects');
-        
-        while (stmt.step()) {
-            const row = stmt.getAsObject();
-            // 解析JSON字段
-            row.images = JSON.parse(row.images || '[]');
-            row.remarks = JSON.parse(row.remarks || '[]');
-            row.history = JSON.parse(row.history || '[]');
-            projects.push(row);
-        }
-        
-        stmt.free();
-        console.log('从SQLite加载项目成功');
-        return projects;
-    } catch (error) {
-        console.error('从SQLite加载失败:', error);
-        return [];
-    }
 }
 
 // 确保目录存在
@@ -456,9 +322,6 @@ function loadProjectsFromFileSystem(file) {
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', async function() {
-    // 初始化SQLite数据库
-    await initSQLite();
-    
     // 检查登录状态
     const isLoggedIn = await checkLoginStatus();
     if (isLoggedIn) {
@@ -477,27 +340,14 @@ document.addEventListener('DOMContentLoaded', async function() {
 
 // 检查数据备份状态
 function checkBackupStatus() {
-    const lastExport = localStorage.getItem('lastExport');
-    const today = new Date();
-    
-    if (lastExport) {
-        // 检查是否超过7天未导出
-        const lastExportDate = new Date(lastExport);
-        const daysSinceExport = (today - lastExportDate) / (1000 * 60 * 60 * 24);
-        
-        if (daysSinceExport >= 7) {
-            setTimeout(() => {
-                if (confirm('您已超过7天未导出项目数据。\n\n为了确保数据安全，建议定期导出数据备份。\n\n是否现在导出数据？')) {
-                    exportProjectData();
-                }
-            }, 3000);
-        }
-    }
+    // 云端存储自动备份，无需本地提醒
+    console.log('数据备份检查完成 - 数据已安全存储在云端');
 }
 
 // 更新最后导出时间
 function updateLastExportTime() {
-    localStorage.setItem('lastExport', new Date().toISOString());
+    // 云端存储自动备份，无需本地记录
+    console.log('导出完成');
 }
 
 // 初始化登录表单
@@ -1452,83 +1302,6 @@ function initializeEventListeners() {
     }
 }
 
-// 初始化IndexedDB
-function initIndexedDB() {
-    return new Promise((resolve, reject) => {
-        const request = indexedDB.open('ProductDevelopmentDB', 1);
-        
-        request.onerror = () => reject('IndexedDB打开失败');
-        
-        request.onupgradeneeded = (event) => {
-            const db = event.target.result;
-            if (!db.objectStoreNames.contains('projects')) {
-                db.createObjectStore('projects', { keyPath: 'id' });
-            }
-        };
-        
-        request.onsuccess = (event) => resolve(event.target.result);
-    });
-}
-
-// 保存项目到IndexedDB
-async function saveToIndexedDB(projects) {
-    try {
-        const db = await initIndexedDB();
-        const transaction = db.transaction(['projects'], 'readwrite');
-        const store = transaction.objectStore('projects');
-        
-        // 清空现有数据
-        const clearRequest = store.clear();
-        clearRequest.onerror = () => console.error('清空数据失败');
-        
-        // 保存所有项目
-        for (const project of projects) {
-            const putRequest = store.put(project);
-            putRequest.onerror = (event) => {
-                console.error('保存项目失败:', event.target.error);
-                // 继续保存其他项目，不中断整个过程
-            };
-        }
-        
-        return new Promise((resolve, reject) => {
-            transaction.oncomplete = () => resolve();
-            transaction.onerror = (event) => {
-                console.error('事务失败:', event.target.error);
-                reject(event.target.error);
-            };
-        });
-    } catch (error) {
-        console.error('保存到IndexedDB失败:', error);
-        // 自动降级到localStorage
-        try {
-            localStorage.setItem('projects', JSON.stringify(projects));
-            console.log('已自动降级到localStorage');
-            return Promise.resolve(); // 降级成功，返回成功
-        } catch (localError) {
-            console.error('保存到localStorage也失败:', localError);
-            throw error; // 都失败了，抛出原始错误
-        }
-    }
-}
-
-// 从IndexedDB加载项目
-async function loadFromIndexedDB() {
-    try {
-        const db = await initIndexedDB();
-        const transaction = db.transaction(['projects'], 'readonly');
-        const store = transaction.objectStore('projects');
-        const request = store.getAll();
-        
-        return new Promise((resolve, reject) => {
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject('加载数据失败');
-        });
-    } catch (error) {
-        console.error('从IndexedDB加载失败:', error);
-        return [];
-    }
-}
-
 // 保存项目
 async function saveProject() {
     console.log('开始保存项目...');
@@ -1643,66 +1416,13 @@ async function saveProject() {
         // 标记这是自己的更新，避免实时同步重复处理
         markOwnUpdate(project.id);
 
-        // 保存到Supabase（优先）
+        // 保存到Supabase（唯一存储方式）
         try {
             await saveToSupabase(project);
-            console.log('Supabase保存成功');
+            console.log('[Sync] ✅ 项目已保存到云端');
         } catch (supabaseError) {
-            console.error('Supabase保存失败:', supabaseError);
-        }
-        
-        // 保存到SQLite
-        try {
-            await saveToSQLite(projects);
-            console.log('SQLite保存成功');
-        } catch (dbError) {
-            console.error('SQLite保存失败:', dbError);
-        }
-        
-        // 无论其他保存是否成功，都保存到localStorage
-        try {
-            // 优化图片数据，限制存储大小
-            const optimizedProjects = projects.map(project => {
-                return {
-                    ...project,
-                    // 只保存第一张图片，并且限制大小
-                    images: project.images ? project.images.slice(0, 1).map(img => {
-                        // 对于大图片进行压缩
-                        if (img.length > 100000) { // 超过100KB
-                            // 暂时只保留第一张图片的前100KB，不添加'...'以保持DataURL有效性
-                            return img.substring(0, 100000);
-                        }
-                        return img;
-                    }) : []
-                };
-            });
-            
-            const projectData = JSON.stringify(optimizedProjects);
-            
-            // 检查数据大小
-            if (projectData.length > 500000) { // 超过500KB
-                alert('项目数据过大，部分图片可能被压缩');
-            }
-            
-            localStorage.setItem('projects', projectData);
-            console.log('本地存储保存成功');
-        } catch (storageError) {
-            console.error('本地存储保存失败:', storageError);
-            
-            // 尝试减少数据量
-            try {
-                const minimalProjects = projects.map(project => {
-                    return {
-                        ...project,
-                        images: [] // 完全移除图片数据
-                    };
-                });
-                localStorage.setItem('projects', JSON.stringify(minimalProjects));
-                alert('保存成功，但图片数据已移除');
-            } catch (e) {
-                alert('保存失败：存储错误，请减少项目数据');
-                return;
-            }
+            console.error('[Sync] ❌ Supabase保存失败:', supabaseError);
+            throw supabaseError;
         }
         
         // 更新项目列表
@@ -2734,7 +2454,7 @@ function exportProjectData() {
 }
 
 // 导入项目数据
-function importProjectData(event) {
+async function importProjectData(event) {
     const file = event.target.files[0];
     if (!file) {
         return;
@@ -2746,7 +2466,7 @@ function importProjectData(event) {
     }
     
     const reader = new FileReader();
-    reader.onload = function(e) {
+    reader.onload = async function(e) {
         try {
             const importData = JSON.parse(e.target.result);
             
@@ -2764,32 +2484,25 @@ function importProjectData(event) {
             // 替换现有项目数据
             projects = importData.projects;
             
-            // 保存到IndexedDB
-            saveToIndexedDB(projects).then(() => {
-                // 保存到localStorage作为备份
+            // 保存到云端
+            let allSaved = true;
+            for (const project of projects) {
                 try {
-                    localStorage.setItem('projects', JSON.stringify(projects));
-                } catch (localError) {
-                    console.error('保存到localStorage失败:', localError);
+                    await saveToSupabase(project);
+                } catch (error) {
+                    console.error('保存项目失败:', project.name, error);
+                    allSaved = false;
                 }
-                
-                // 更新项目列表
-                updateProjectList();
-                
-                alert('项目数据导入成功');
-            }).catch(error => {
-                console.error('保存到数据库失败:', error);
-                // 即使保存到数据库失败，也要更新项目列表，因为数据已经导入到内存中
-                updateProjectList();
-                // 尝试直接保存到localStorage
-                try {
-                    localStorage.setItem('projects', JSON.stringify(projects));
-                    alert('项目数据导入成功，已保存到本地存储');
-                } catch (localError) {
-                    console.error('保存到localStorage也失败:', localError);
-                    alert('项目数据导入成功，但保存到存储失败');
-                }
-            });
+            }
+            
+            // 更新项目列表
+            updateProjectList();
+            
+            if (allSaved) {
+                alert('项目数据导入成功，已保存到云端');
+            } else {
+                alert('项目数据导入成功，但部分项目保存到云端失败，请检查网络连接');
+            }
         } catch (error) {
             console.error('导入项目数据失败:', error);
             alert('导入项目数据失败: ' + error.message);
@@ -3063,88 +2776,36 @@ async function deleteProject(id) {
         // 标记这是自己的删除操作，避免实时同步重复处理
         markOwnUpdate(id);
         
-        // 从Supabase删除
+        // 从Supabase删除（唯一存储方式）
         try {
             await deleteFromSupabase(id);
-            console.log('Supabase删除项目成功');
+            console.log('[Sync] ✅ 项目已从云端删除');
         } catch (supabaseError) {
-            console.error('Supabase删除失败:', supabaseError);
-        }
-        
-        // 保存到SQLite
-        try {
-            await saveToSQLite(projects);
-            console.log('SQLite删除项目成功');
-        } catch (dbError) {
-            console.error('SQLite删除失败:', dbError);
-        }
-        
-        // 无论其他保存是否成功，都保存到localStorage
-        try {
-            localStorage.setItem('projects', JSON.stringify(projects));
-            console.log('本地存储删除项目成功');
-        } catch (storageError) {
-            console.error('本地存储保存失败:', storageError);
+            console.error('[Sync] ❌ Supabase删除失败:', supabaseError);
+            throw supabaseError;
         }
         
         updateProjectList();
     }
 }
 
-// 从多个数据源加载项目
+// 从云端加载项目
 async function loadProjects() {
-    console.log('[Sync] 🔄 开始加载项目数据...');
+    console.log('[Sync] 🔄 开始从云端加载项目数据...');
     
     try {
-        // 首先尝试从Supabase加载
+        // 从Supabase加载项目
         const supabaseProjects = await loadFromSupabase();
         if (supabaseProjects && supabaseProjects.length > 0) {
             projects = supabaseProjects;
-            console.log('[Sync] ✅ 从云端加载成功');
-            // 同时保存到localStorage作为备份
-            localStorage.setItem('projects', JSON.stringify(projects));
+            console.log('[Sync] ✅ 从云端加载成功，共 ' + projects.length + ' 个项目');
             updateProjectList();
             return;
         }
         
-        console.log('[Sync] ⚠️ 云端没有数据，尝试本地存储');
-        
-        // 如果Supabase没有数据，尝试从localStorage加载
-        const storedProjects = localStorage.getItem('projects');
-        if (storedProjects) {
-            projects = JSON.parse(storedProjects);
-            console.log('[Sync] ✅ 从本地存储加载成功');
-            // 同步到Supabase
-            if (supabaseClient && supabaseConnectionStatus === 'connected') {
-                console.log('[Sync] 🔄 正在将本地数据同步到云端...');
-                for (const project of projects) {
-                    await saveToSupabase(project);
-                }
-            }
-            updateProjectList();
-            return;
-        }
-        
-        // 如果localStorage没有数据，尝试从SQLite加载
-        const sqliteProjects = await loadFromSQLite();
-        if (sqliteProjects && sqliteProjects.length > 0) {
-            projects = sqliteProjects;
-            console.log('[Sync] ✅ 从SQLite加载成功');
-            // 同时保存到localStorage和Supabase
-            localStorage.setItem('projects', JSON.stringify(projects));
-            if (supabaseClient && supabaseConnectionStatus === 'connected') {
-                console.log('[Sync] 🔄 正在将SQLite数据同步到云端...');
-                for (const project of projects) {
-                    await saveToSupabase(project);
-                }
-            }
-            updateProjectList();
-            return;
-        }
-        
-        // 如果所有存储都失败，初始化空数组
+        // 如果云端没有数据，初始化空数组
         projects = [];
-        console.log('[Sync] 📭 初始化空项目数组');
+        console.log('[Sync] 📭 云端无数据，初始化空项目数组');
         updateProjectList();
     } catch (error) {
         console.error('[Sync] ❌ 加载项目时出错:', error);
@@ -3188,26 +2849,26 @@ function loadProjectsFromDatabaseFolder() {
             // 替换现有项目数据
             projects = loadedProjects;
             
-            // 保存到IndexedDB
-            try {
-                await saveToIndexedDB(projects);
-                console.log('保存到IndexedDB成功');
-            } catch (dbError) {
-                console.error('保存到IndexedDB失败:', dbError);
-                
-                // 降级到localStorage
+            // 保存到云端
+            let allSaved = true;
+            for (const project of projects) {
                 try {
-                    localStorage.setItem('projects', JSON.stringify(projects));
-                    console.log('保存到localStorage成功');
-                } catch (storageError) {
-                    console.error('保存到localStorage失败:', storageError);
+                    await saveToSupabase(project);
+                } catch (error) {
+                    console.error('保存项目失败:', project.name, error);
+                    allSaved = false;
                 }
             }
+            console.log('保存到云端完成');
             
             // 更新项目列表
             updateProjectList();
             
-            alert('从database文件夹加载项目数据成功');
+            if (allSaved) {
+                alert('项目数据加载成功，已保存到云端');
+            } else {
+                alert('项目数据加载成功，但部分项目保存到云端失败，请检查网络连接');
+            }
         } catch (error) {
             console.error('加载项目数据失败:', error);
             alert('加载项目数据失败: ' + error.message);
