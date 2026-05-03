@@ -506,7 +506,22 @@ async function saveToSupabase(project) {
     }
     
     try {
-        // 准备项目数据
+        // 检查项目是否已存在
+        const { data: existingProject } = await supabaseClient
+            .from('projects')
+            .select('id, images')
+            .eq('id', project.id)
+            .single();
+        
+        // 如果是更新，先删除旧图片
+        if (existingProject && existingProject.images) {
+            await deleteProjectImages(existingProject.id, JSON.parse(existingProject.images));
+        }
+        
+        // 上传新图片到 Storage
+        const imageUrls = await uploadImagesToStorage(project.id, project.images || []);
+        
+        // 准备项目数据（存储图片URL而非Base64）
         const projectData = {
             id: project.id,
             name: project.name,
@@ -517,19 +532,12 @@ async function saveToSupabase(project) {
             priority: project.priority,
             progress: project.progress,
             launch_date: project.launchDate,
-            images: JSON.stringify(project.images || []),
+            images: JSON.stringify(imageUrls),
             remarks: JSON.stringify(project.remarks || []),
             history: JSON.stringify(project.history || []),
             created_at: project.createdAt,
             updated_at: new Date().toISOString()
         };
-        
-        // 检查项目是否已存在
-        const { data: existingProject } = await supabaseClient
-            .from('projects')
-            .select('id')
-            .eq('id', project.id)
-            .single();
         
         if (existingProject) {
             // 更新现有项目
@@ -558,6 +566,36 @@ async function saveToSupabase(project) {
     } catch (error) {
         console.error('保存到Supabase失败:', error);
         return false;
+    }
+}
+
+// 删除项目相关的图片
+async function deleteProjectImages(projectId, imageUrls) {
+    if (!supabaseClient || !imageUrls || imageUrls.length === 0) {
+        return;
+    }
+    
+    try {
+        for (const url of imageUrls) {
+            // 从URL中提取文件名（只处理Storage的URL）
+            if (url && url.includes('supabase.co/storage/v1/object/public/project-images/')) {
+                const fileName = url.split('/').pop();
+                if (fileName) {
+                    const { error } = await supabaseClient
+                        .storage
+                        .from('project-images')
+                        .remove([fileName]);
+                    
+                    if (error) {
+                        console.warn('删除图片失败:', error);
+                    } else {
+                        console.log('删除图片成功:', fileName);
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error('删除项目图片异常:', error);
     }
 }
 
@@ -610,6 +648,19 @@ async function deleteFromSupabase(projectId) {
     }
     
     try {
+        // 先获取项目的图片信息
+        const { data: project } = await supabaseClient
+            .from('projects')
+            .select('images')
+            .eq('id', projectId)
+            .single();
+        
+        // 删除相关图片
+        if (project && project.images) {
+            await deleteProjectImages(projectId, JSON.parse(project.images));
+        }
+        
+        // 删除项目记录
         const { error } = await supabaseClient
             .from('projects')
             .delete()
@@ -869,9 +920,9 @@ function initializeImageUpload() {
                     continue;
                 }
                 
+                // 压缩图片后直接存储到 uploadedImages（保持原有逻辑用于预览）
                 const reader = new FileReader();
                 reader.onload = function(e) {
-                    // 压缩图片
                     compressImage(e.target.result, function(compressedImageUrl) {
                         uploadedImages.push(compressedImageUrl);
                         updateImagePreview();
@@ -880,6 +931,75 @@ function initializeImageUpload() {
                 reader.readAsDataURL(file);
             }
         }
+    }
+    
+    // 将Base64图片转换为Blob对象
+    function base64ToBlob(base64Data) {
+        const parts = base64Data.split(',');
+        const contentType = parts[0].split(':')[1].split(';')[0];
+        const raw = window.atob(parts[1]);
+        const rawLength = raw.length;
+        const uInt8Array = new Uint8Array(rawLength);
+        
+        for (let i = 0; i < rawLength; i++) {
+            uInt8Array[i] = raw.charCodeAt(i);
+        }
+        
+        return new Blob([uInt8Array], { type: contentType });
+    }
+    
+    // 上传单张图片到 Supabase Storage
+    async function uploadImageToStorage(base64Image, projectId, index) {
+        if (!supabaseClient) {
+            console.warn('Supabase未初始化，跳过图片上传');
+            return base64Image; // 返回原始Base64作为降级方案
+        }
+        
+        try {
+            // 将Base64转换为Blob
+            const blob = base64ToBlob(base64Image);
+            const fileName = `${projectId}_${index}_${Date.now()}.jpg`;
+            
+            // 上传到Storage
+            const { data, error } = await supabaseClient
+                .storage
+                .from('project-images')
+                .upload(fileName, blob, {
+                    contentType: 'image/jpeg',
+                    upsert: true
+                });
+            
+            if (error) {
+                console.error('上传图片失败:', error);
+                return base64Image; // 失败时返回原始Base64
+            }
+            
+            // 获取公开URL
+            const { data: { publicUrl } } = supabaseClient
+                .storage
+                .from('project-images')
+                .getPublicUrl(fileName);
+            
+            console.log('图片上传成功:', publicUrl);
+            return publicUrl;
+        } catch (error) {
+            console.error('上传图片异常:', error);
+            return base64Image; // 异常时返回原始Base64
+        }
+    }
+    
+    // 批量上传图片到 Supabase Storage
+    async function uploadImagesToStorage(projectId, images) {
+        if (!images || images.length === 0) {
+            return [];
+        }
+        
+        const uploadedUrls = [];
+        for (let i = 0; i < images.length; i++) {
+            const url = await uploadImageToStorage(images[i], projectId, i);
+            uploadedUrls.push(url);
+        }
+        return uploadedUrls;
     }
 
     // 更新图片预览
