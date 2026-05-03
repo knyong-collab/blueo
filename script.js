@@ -1336,6 +1336,13 @@ async function saveProject() {
             return;
         }
 
+        // 验证日期格式
+        function isValidDate(dateString) {
+            if (!dateString) return false;
+            const date = new Date(dateString);
+            return date instanceof Date && !isNaN(date);
+        }
+        
         // 构建项目数据
         const projectData = {
             id: currentEditProjectId || Date.now().toString(),
@@ -1344,7 +1351,7 @@ async function saveProject() {
             category: productCategory,
             productType: productType,
             priority: priority,
-            launchDate: estimatedLaunchDate,
+            launchDate: isValidDate(estimatedLaunchDate) ? estimatedLaunchDate : '', // 无效日期设为空
             status: status,
             progress: progress,
             images: uploadedImages,
