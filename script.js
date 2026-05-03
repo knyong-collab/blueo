@@ -5,30 +5,134 @@ const SUPABASE_ANON_KEY = 'sb_publishable__buesO2Qc5sXtLvBkLQpuQ_6dfF7z6u';
 // Supabase客户端实例
 let supabaseClient = null;
 let supabaseInitialized = false;
+let supabaseConnectionStatus = 'disconnected'; // 'disconnected', 'connecting', 'connected', 'error'
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
-function initSupabaseClient() {
+// ==================== Supabase连接管理 ====================
+
+async function initSupabaseClient() {
+    console.log('[Sync] 开始初始化Supabase客户端...');
+    
     try {
-        // 等待supabase全局对象可用
-        if (typeof window !== 'undefined' && window.supabase) {
-            // 创建supabase客户端实例
-            if (!window.supabaseInstance) {
-                window.supabaseInstance = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-            }
-            supabaseClient = window.supabaseInstance;
-            supabaseInitialized = true;
-            console.log('Supabase客户端初始化成功');
-        } else {
-            console.warn('Supabase SDK未加载，将使用离线模式');
-            supabaseInitialized = false;
+        // 等待supabase全局对象可用（增加重试机制）
+        if (typeof window === 'undefined') {
+            console.warn('[Sync] 非浏览器环境');
+            return;
         }
+        
+        let retryCount = 0;
+        const maxRetries = 10;
+        
+        const tryInit = async () => {
+            if (window.supabase) {
+                // 创建supabase客户端实例
+                if (!window.supabaseInstance) {
+                    window.supabaseInstance = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+                }
+                supabaseClient = window.supabaseInstance;
+                supabaseInitialized = true;
+                supabaseConnectionStatus = 'connected';
+                reconnectAttempts = 0;
+                console.log('[Sync] ✅ Supabase客户端初始化成功');
+                
+                // 验证连接
+                await testSupabaseConnection();
+                
+                // 更新UI状态
+                updateConnectionStatusUI(true);
+                return true;
+            }
+            return false;
+        };
+        
+        if (await tryInit()) return;
+        
+        // 重试机制
+        const retryInterval = setInterval(async () => {
+            retryCount++;
+            console.log(`[Sync] 等待Supabase SDK加载... (${retryCount}/${maxRetries})`);
+            
+            if (await tryInit()) {
+                clearInterval(retryInterval);
+                return;
+            }
+            
+            if (retryCount >= maxRetries) {
+                clearInterval(retryInterval);
+                console.error('[Sync] ❌ Supabase SDK加载超时');
+                supabaseConnectionStatus = 'error';
+                updateConnectionStatusUI(false);
+                alert('Supabase服务连接超时，请检查网络连接或刷新页面');
+            }
+        }, 500);
+        
     } catch (error) {
-        console.error('Supabase初始化失败:', error);
+        console.error('[Sync] ❌ Supabase初始化失败:', error);
         supabaseInitialized = false;
+        supabaseConnectionStatus = 'error';
+        updateConnectionStatusUI(false);
     }
 }
 
+// 测试Supabase连接
+async function testSupabaseConnection() {
+    if (!supabaseClient) return false;
+    
+    try {
+        console.log('[Sync] 测试Supabase连接...');
+        const { error } = await supabaseClient
+            .from('projects')
+            .select('id')
+            .limit(1);
+        
+        if (error && error.code !== 'PGRST116') { // PGRST116是表不存在，不算连接错误
+            console.error('[Sync] ❌ 连接测试失败:', error);
+            return false;
+        }
+        
+        console.log('[Sync] ✅ 连接测试成功');
+        return true;
+    } catch (error) {
+        console.error('[Sync] ❌ 连接测试异常:', error);
+        return false;
+    }
+}
+
+// 更新连接状态UI
+function updateConnectionStatusUI(isConnected) {
+    const statusElement = document.getElementById('syncStatus');
+    if (statusElement) {
+        if (isConnected) {
+            statusElement.textContent = '🟢 实时同步中';
+            statusElement.className = 'sync-status online';
+            statusElement.title = '数据已连接云端';
+        } else {
+            statusElement.textContent = '🔴 离线模式';
+            statusElement.className = 'sync-status offline';
+            statusElement.title = '网络连接失败，请检查网络';
+        }
+    }
+}
+
+// 自动重连
+async function tryReconnect() {
+    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        console.warn('[Sync] 达到最大重连次数');
+        return;
+    }
+    
+    reconnectAttempts++;
+    console.log(`[Sync] 尝试重连... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+    supabaseConnectionStatus = 'connecting';
+    
+    await initSupabaseClient();
+}
+
 // 立即尝试初始化
-initSupabaseClient();
+window.addEventListener('DOMContentLoaded', () => {
+    initSupabaseClient();
+});
 
 // 全局变量
 let uploadedImages = [];
@@ -245,7 +349,7 @@ async function saveToSQLite(projects) {
             );
         }
         
-        stmt.finalize();
+        stmt.free();
         db.run('COMMIT');
         
         console.log('数据保存到SQLite成功');
@@ -276,7 +380,7 @@ async function loadFromSQLite() {
             projects.push(row);
         }
         
-        stmt.finalize();
+        stmt.free();
         console.log('从SQLite加载项目成功');
         return projects;
     } catch (error) {
@@ -474,6 +578,8 @@ function initializeLoginForm() {
 
 // 初始化应用
 async function initializeApp() {
+    console.log('[Sync] 🚀 开始初始化应用...');
+    
     initializeImageUpload();
     initializeForm();
     initializeStatusProgress();
@@ -488,10 +594,18 @@ async function initializeApp() {
     // 更新用户显示
     updateUserDisplay();
     
-    // 初始化Supabase实时同步
-    if (supabaseClient) {
-        initSupabaseRealtime();
-    }
+    // 等待Supabase连接后再初始化实时同步
+    const waitForConnection = async () => {
+        if (supabaseClient && supabaseConnectionStatus === 'connected') {
+            console.log('[Sync] 🔄 初始化实时同步...');
+            initSupabaseRealtime();
+        } else {
+            console.log('[Sync] ⏳ 等待Supabase连接...');
+            setTimeout(waitForConnection, 500);
+        }
+    };
+    
+    waitForConnection();
     
     await loadProjects();
 }
@@ -501,27 +615,25 @@ async function initializeApp() {
 // 保存项目到Supabase
 async function saveToSupabase(project) {
     if (!supabaseClient) {
-        console.warn('Supabase未初始化，跳过保存');
+        console.warn('[Sync] ⚠️ Supabase未初始化，跳过保存');
         return false;
     }
     
     try {
+        console.log(`[Sync] 💾 正在保存项目到云端: ${project.name}`);
+        
         // 检查项目是否已存在
-        const { data: existingProject } = await supabaseClient
+        const { data: existingProject, error: selectError } = await supabaseClient
             .from('projects')
             .select('id, images')
             .eq('id', project.id)
             .single();
         
-        // 如果是更新，先删除旧图片
-        if (existingProject && existingProject.images) {
-            await deleteProjectImages(existingProject.id, JSON.parse(existingProject.images));
+        if (selectError && selectError.code !== 'PGRST116') {
+            console.error('[Sync] ❌ 查询项目失败:', selectError);
         }
         
-        // 上传新图片到 Storage
-        const imageUrls = await uploadImagesToStorage(project.id, project.images || []);
-        
-        // 准备项目数据（存储图片URL而非Base64）
+        // 准备项目数据（简化版，先不处理复杂的Storage上传）
         const projectData = {
             id: project.id,
             name: project.name,
@@ -532,39 +644,54 @@ async function saveToSupabase(project) {
             priority: project.priority,
             progress: project.progress,
             launch_date: project.launchDate,
-            images: JSON.stringify(imageUrls),
+            images: JSON.stringify(project.images || []), // 暂时直接存储
             remarks: JSON.stringify(project.remarks || []),
             history: JSON.stringify(project.history || []),
             created_at: project.createdAt,
             updated_at: new Date().toISOString()
         };
         
+        let saveError;
         if (existingProject) {
             // 更新现有项目
             const { error } = await supabaseClient
                 .from('projects')
                 .update(projectData)
                 .eq('id', project.id);
-            
-            if (error) throw error;
+            saveError = error;
+            console.log('[Sync] 更新现有项目');
         } else {
             // 插入新项目
             const { error } = await supabaseClient
                 .from('projects')
                 .insert([projectData]);
-            
-            if (error) throw error;
+            saveError = error;
+            console.log('[Sync] 插入新项目');
         }
         
-        // 记录操作历史
-        if (currentUser) {
-            await logProjectHistory(project.id, existingProject ? 'update' : 'create');
+        if (saveError) {
+            console.error('[Sync] ❌ 保存失败:', saveError);
+            console.error('[Sync] 错误详情:', {
+                code: saveError.code,
+                message: saveError.message,
+                hint: saveError.hint
+            });
+            throw saveError;
         }
         
-        console.log('数据保存到Supabase成功');
+        console.log(`[Sync] ✅ 项目"${project.name}"已保存到云端`);
         return true;
     } catch (error) {
-        console.error('保存到Supabase失败:', error);
+        console.error('[Sync] ❌ 保存到Supabase失败:', error);
+        
+        // 更新连接状态
+        if (error.message && error.message.includes('fetch')) {
+            console.warn('[Sync] 网络连接可能已断开');
+            supabaseConnectionStatus = 'error';
+            updateConnectionStatusUI(false);
+            tryReconnect();
+        }
+        
         return false;
     }
 }
@@ -602,25 +729,34 @@ async function deleteProjectImages(projectId, imageUrls) {
 // 从Supabase加载项目
 async function loadFromSupabase() {
     if (!supabaseClient) {
-        console.warn('Supabase未初始化，跳过加载');
+        console.warn('[Sync] ⚠️ Supabase未初始化，跳过加载');
         return [];
     }
     
     try {
+        console.log('[Sync] 📥 正在从云端加载项目...');
+        
         const { data, error } = await supabaseClient
             .from('projects')
             .select('*')
             .order('created_at', { ascending: false });
         
-        if (error) throw error;
+        if (error) {
+            console.error('[Sync] ❌ 加载失败:', error);
+            console.error('[Sync] 错误详情:', {
+                code: error.code,
+                message: error.message,
+                hint: error.hint
+            });
+            throw error;
+        }
         
         // 解析JSON字段
-        const projects = data.map(row => ({
+        const loadedProjects = data.map(row => ({
             id: row.id,
             name: row.name,
             brand: row.brand,
-            category: row.category,
-            productType: row.product_type,
+            category: row.product_type,
             status: row.status,
             priority: row.priority,
             progress: row.progress,
@@ -632,10 +768,18 @@ async function loadFromSupabase() {
             updatedAt: row.updated_at
         }));
         
-        console.log('从Supabase加载项目成功，共', projects.length, '个项目');
-        return projects;
+        console.log(`[Sync] ✅ 成功从云端加载 ${loadedProjects.length} 个项目`);
+        return loadedProjects;
     } catch (error) {
-        console.error('从Supabase加载失败:', error);
+        console.error('[Sync] ❌ 从Supabase加载失败:', error);
+        
+        // 更新连接状态
+        if (error.message && error.message.includes('fetch')) {
+            console.warn('[Sync] 网络连接可能已断开');
+            supabaseConnectionStatus = 'error';
+            updateConnectionStatusUI(false);
+        }
+        
         return [];
     }
 }
@@ -702,13 +846,16 @@ let realtimeChannel = null;
 // 初始化Supabase实时同步
 function initSupabaseRealtime() {
     if (!supabaseClient) {
-        console.warn('Supabase未初始化，延迟启动实时同步');
+        console.warn('[Sync] ⚠️ Supabase未初始化，延迟启动实时同步');
         setTimeout(initSupabaseRealtime, 2000);
         return;
     }
     
+    console.log('[Sync] 🔄 正在建立实时同步连接...');
+    
     // 如果已有通道，先关闭
     if (realtimeChannel) {
+        console.log('[Sync] 🔌 关闭旧连接');
         supabaseClient.removeChannel(realtimeChannel);
     }
     
@@ -721,11 +868,11 @@ function initSupabaseRealtime() {
                 schema: 'public',
                 table: 'projects'
             }, async (payload) => {
-                console.log('收到Supabase实时更新:', payload.eventType, payload.new.id);
+                console.log(`[Sync] 📡 收到实时更新: ${payload.eventType}`);
                 
                 // 检查是否是当前用户自己的修改
-                if (isOwnUpdate(payload.new.id)) {
-                    console.log('跳过自己的更新');
+                if (isOwnUpdate(payload.new?.id || payload.old?.id)) {
+                    console.log('[Sync] ⏭️ 跳过自己的更新');
                     return;
                 }
                 
@@ -737,17 +884,24 @@ function initSupabaseRealtime() {
             })
             .subscribe((status) => {
                 if (status === 'SUBSCRIBED') {
-                    console.log('✅ 实时同步已连接');
-                    showConnectionStatus(true);
+                    console.log('[Sync] ✅ 实时同步连接成功！');
+                    updateConnectionStatusUI(true);
+                } else if (status === 'CHANNEL_ERROR') {
+                    console.error('[Sync] ❌ 实时同步通道错误');
+                    updateConnectionStatusUI(false);
+                } else if (status === 'TIMED_OUT') {
+                    console.warn('[Sync] ⏱️ 实时同步超时');
+                    updateConnectionStatusUI(false);
+                    setTimeout(initSupabaseRealtime, 5000);
                 } else {
-                    console.warn('⚠️ 实时同步状态:', status);
+                    console.warn('[Sync] ⚠️ 实时同步状态:', status);
                 }
             });
         
-        console.log('Supabase实时同步初始化成功');
+        console.log('[Sync] ✅ 实时同步初始化成功');
     } catch (error) {
-        console.error('Supabase实时同步初始化失败:', error);
-        showConnectionStatus(false);
+        console.error('[Sync] ❌ 实时同步初始化失败:', error);
+        updateConnectionStatusUI(false);
         // 自动重试
         setTimeout(initSupabaseRealtime, 5000);
     }
@@ -829,16 +983,21 @@ function showSyncNotification(payload) {
         DELETE: '删除了项目'
     };
     
+    // 获取项目名称
+    const projectName = payload.new?.name || payload.old?.name || '项目';
+    
     notification.innerHTML = `
         <div class="sync-notification-icon">🔄</div>
         <div class="sync-notification-content">
             <div class="sync-notification-title">${eventText[payload.eventType]}</div>
-            <div class="sync-notification-name">${payload.new?.name || '项目'}</div>
+            <div class="sync-notification-name">${projectName}</div>
         </div>
         <div class="sync-notification-close" onclick="this.parentElement.remove()">×</div>
     `;
     
     document.body.appendChild(notification);
+    
+    console.log(`[Sync] 📨 显示同步通知: ${eventText[payload.eventType]} - ${projectName}`);
     
     // 3秒后自动消失
     setTimeout(() => {
@@ -847,15 +1006,6 @@ function showSyncNotification(payload) {
             setTimeout(() => notification.remove(), 300);
         }
     }, 3000);
-}
-
-// 更新连接状态显示
-function showConnectionStatus(isConnected) {
-    const statusElement = document.getElementById('syncStatus');
-    if (statusElement) {
-        statusElement.textContent = isConnected ? '🟢 实时同步中' : '🔴 离线模式';
-        statusElement.className = isConnected ? 'sync-status online' : 'sync-status offline';
-    }
 }
 
 // 初始化图片上传功能
@@ -2943,26 +3093,33 @@ async function deleteProject(id) {
 
 // 从多个数据源加载项目
 async function loadProjects() {
+    console.log('[Sync] 🔄 开始加载项目数据...');
+    
     try {
         // 首先尝试从Supabase加载
         const supabaseProjects = await loadFromSupabase();
         if (supabaseProjects && supabaseProjects.length > 0) {
             projects = supabaseProjects;
-            console.log('从Supabase加载项目成功');
+            console.log('[Sync] ✅ 从云端加载成功');
             // 同时保存到localStorage作为备份
             localStorage.setItem('projects', JSON.stringify(projects));
             updateProjectList();
             return;
         }
         
+        console.log('[Sync] ⚠️ 云端没有数据，尝试本地存储');
+        
         // 如果Supabase没有数据，尝试从localStorage加载
         const storedProjects = localStorage.getItem('projects');
         if (storedProjects) {
             projects = JSON.parse(storedProjects);
-            console.log('从localStorage加载项目成功');
+            console.log('[Sync] ✅ 从本地存储加载成功');
             // 同步到Supabase
-            for (const project of projects) {
-                await saveToSupabase(project);
+            if (supabaseClient && supabaseConnectionStatus === 'connected') {
+                console.log('[Sync] 🔄 正在将本地数据同步到云端...');
+                for (const project of projects) {
+                    await saveToSupabase(project);
+                }
             }
             updateProjectList();
             return;
@@ -2972,11 +3129,14 @@ async function loadProjects() {
         const sqliteProjects = await loadFromSQLite();
         if (sqliteProjects && sqliteProjects.length > 0) {
             projects = sqliteProjects;
-            console.log('从SQLite加载项目成功');
+            console.log('[Sync] ✅ 从SQLite加载成功');
             // 同时保存到localStorage和Supabase
             localStorage.setItem('projects', JSON.stringify(projects));
-            for (const project of projects) {
-                await saveToSupabase(project);
+            if (supabaseClient && supabaseConnectionStatus === 'connected') {
+                console.log('[Sync] 🔄 正在将SQLite数据同步到云端...');
+                for (const project of projects) {
+                    await saveToSupabase(project);
+                }
             }
             updateProjectList();
             return;
@@ -2984,10 +3144,10 @@ async function loadProjects() {
         
         // 如果所有存储都失败，初始化空数组
         projects = [];
-        console.log('初始化空项目数组');
+        console.log('[Sync] 📭 初始化空项目数组');
         updateProjectList();
     } catch (error) {
-        console.error('加载项目时出错:', error);
+        console.error('[Sync] ❌ 加载项目时出错:', error);
         // 降级到空数组
         projects = [];
         updateProjectList();
