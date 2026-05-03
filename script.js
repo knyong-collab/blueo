@@ -493,7 +493,7 @@ async function saveToSupabase(project) {
             status: project.status,
             priority: project.priority,
             progress: project.progress,
-            launch_date: project.launchDate,
+            launch_date: project.launchDate && project.launchDate !== '' ? project.launchDate : null, // 空字符串转换为null
             images: JSON.stringify(project.images || []), // 暂时直接存储
             remarks: JSON.stringify(project.remarks || []),
             history: JSON.stringify(project.history || []),
