@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>编辑项目 - 蓝橙产品开发项目管理</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        /* 编辑页面专用样式 */
+        .edit-page {
+            min-height: 100vh;
+            padding: 20px;
+            animation: pageSlideIn 0.4s ease;
+        }
+
+        @keyframes pageSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .edit-container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--secondary-bg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            overflow: hidden;
+        }
+
+        .edit-header {
+            background: linear-gradient(135deg, var(--primary-bg) 0%, var(--secondary-bg) 100%);
+            padding: 30px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .edit-header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+        }
+
+        .edit-header-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .edit-body {
+            padding: 30px;
+        }
+
+        .edit-section {
+            margin-bottom: 30px;
+        }
+
+        .edit-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .edit-section h3 {
+            color: var(--accent-color);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--accent-color);
+        }
+
+        /* 移动端响应式 */
+        @media (max-width: 767px) {
+            .edit-page {
+                padding: 10px;
+            }
+
+            .edit-header {
+                padding: 20px;
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .edit-header h1 {
+                font-size: 1.5rem;
+            }
+
+            .edit-body {
+                padding: 20px;
+            }
+
+            .edit-section h3 {
+                font-size: 1.2rem;
+            }
+        }
+
+        /* 页面过渡动画 */
+        .page-transition {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--primary-bg);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .page-transition.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .page-transition-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid var(--border-color);
+            border-top-color: var(--accent-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 页面过渡动画层 -->
+    <div id="pageTransition" class="page-transition">
+        <div class="page-transition-spinner"></div>
+    </div>
+
+    <!-- 编辑页面主容器 -->
+    <div class="edit-page">
+        <div class="edit-container">
+            <!-- 页面头部 -->
+            <div class="edit-header">
+                <h1 id="pageTitle">新增项目</h1>
+                <div class="edit-header-actions">
+                    <button id="saveBtn" class="btn btn-primary">保存项目</button>
+                    <button id="cancelBtn" class="btn btn-secondary">取消</button>
+                </div>
+            </div>
+
+            <!-- 页面主体 -->
+            <div class="edit-body">
+                <!-- 产品图片上传区域 -->
+                <section class="edit-section image-upload-section">
+                    <h3>产品图片</h3>
+                    <div id="dropZone" class="drop-zone">
+                        <div class="drop-zone-content">
+                            <p>拖拽图片到此处或粘贴图片</p>
+                            <p>支持JPG、PNG、GIF格式</p>
+                        </div>
+                        <input type="file" id="fileInput" accept="image/*" multiple>
+                    </div>
+                    <div id="imagePreview" class="image-preview"></div>
+                </section>
+
+                <!-- 项目信息表单 -->
+                <section class="edit-section form-section">
+                    <h3>项目信息</h3>
+                    <form id="projectForm">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="projectName">项目名称</label>
+                                <input type="text" id="projectName" required>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="brand">品牌</label>
+                                <select id="brand" required>
+                                    <option value="">请选择</option>
+                                    <option value="BLUEO">BLUEO</option>
+                                    <option value="TG">TG</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="productCategory">项目类型</label>
+                                <select id="productCategory" required>
+                                    <option value="">请选择</option>
+                                    <option value="小品类">小品类</option>
+                                    <option value="功能类">功能类</option>
+                                    <option value="保护类">保护类</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="productType">项目情况</label>
+                                <select id="productType" required>
+                                    <option value="">请选择</option>
+                                    <option value="开发中">开发中</option>
+                                    <option value="生产中">生产中</option>
+                                    <option value="暂缓">暂缓</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="priority">优先级</label>
+                                <select id="priority" required>
+                                    <option value="">请选择</option>
+                                    <option value="高">高</option>
+                                    <option value="中">中</option>
+                                    <option value="低">低</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label for="estimatedLaunchDate">预计上市时间</label>
+                                <input type="text" id="estimatedLaunchDate" class="form-input" placeholder="YYYY-MM-DD">
+                                <span class="field-hint">请输入日期，格式：YYYY-MM-DD</span>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="remarks">备注</label>
+                            <textarea id="remarks" rows="3" placeholder="请输入备注信息..."></textarea>
+                        </div>
+                    </form>
+                </section>
+
+                <!-- 项目状态和进度整合 -->
+                <section class="edit-section status-progress-section">
+                    <h3>项目状态与进度</h3>
+
+                    <!-- 状态和进度控制 -->
+                    <div class="status-progress-controls">
+                        <!-- 状态控制 -->
+                        <div class="status-controls">
+                            <div class="status-buttons">
+                                <button class="status-btn" data-status="概念设计" data-progress="5">概念设计</button>
+                                <button class="status-btn" data-status="产品打样" data-progress="15">产品打样</button>
+                                <button class="status-btn" data-status="模具开发" data-progress="30">模具开发</button>
+                                <button class="status-btn" data-status="产前样" data-progress="50">产前样</button>
+                                <button class="status-btn" data-status="下首单" data-progress="70">下首单</button>
+                                <button class="status-btn" data-status="大货生产" data-progress="85">大货生产</button>
+                                <button class="status-btn" data-status="首发图" data-progress="95">首发图</button>
+                                <button class="status-btn status-complete" data-status="包装设计" data-progress="100">包装设计</button>
+                                <button class="status-btn status-pause" data-status="项目暂停" data-progress="-1">项目暂停</button>
+                            </div>
+                            <div class="status-input">
+                                <label for="customStatus">自定义状态</label>
+                                <input type="text" id="customStatus" placeholder="或手动输入状态...">
+                                <button id="setCustomStatus" class="btn btn-small">设置</button>
+                            </div>
+                            <div id="currentStatus" class="current-status">
+                                <p>当前状态：<span id="statusText">未设置</span></p>
+                            </div>
+                        </div>
+
+                        <!-- 进度控制 -->
+                        <div class="progress-controls">
+                            <div class="progress-header">
+                                <span class="progress-label">项目进度</span>
+                                <span id="progressPercentage" class="progress-percentage">0%</span>
+                            </div>
+                            <div style="display: flex; align-items: center; justify-content: space-between;">
+                                <div id="progressBar" class="progress-bar" style="flex: 1; margin-right: 20px;">
+                                    <div id="progressFill" class="progress-fill"></div>
+                                </div>
+                                <div class="circular-progress">
+                                    <svg width="80" height="80">
+                                        <circle class="progress-bg" cx="40" cy="40" r="30"></circle>
+                                        <circle id="circularProgressFill" class="progress-fill" cx="40" cy="40" r="30" style="stroke-dasharray: 188.5; stroke-dashoffset: 188.5;"></circle>
+                                    </svg>
+                                    <div class="progress-text">0%</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="edit.js"></script>
+</body>
+</html>

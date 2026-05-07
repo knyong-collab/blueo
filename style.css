@@ -1051,31 +1051,34 @@ small {
     top: 0;
     width: 100%;
     height: 100%;
-    overflow: auto;
     background-color: rgba(0, 0, 0, 0.7);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
 }
 
 .detail-modal.show {
-    display: block;
-    animation: modalFadeIn 0.3s ease;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
 }
 
 .detail-modal-content {
     background: linear-gradient(135deg, #0a1128 0%, #1e3a8a 50%, #1d4ed8 100%);
     position: relative;
-    margin: 20px auto;
+    top: auto;
+    left: auto;
+    transform: none;
+    margin: 20px;
     padding: 0;
     border-radius: 24px;
-    width: 95%;
+    width: 100%;
     max-width: 1000px;
     max-height: 90vh;
-    overflow-y: auto;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05), 0 0 0 2px rgba(0, 0, 0, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.2);
     animation: modalSlideIn 0.3s ease;
-    overflow: hidden;
+    display: flex;
+    flex-direction: column;
 }
 
 .detail-modal-content::before {
@@ -1174,6 +1177,9 @@ small {
 
 .detail-modal-body {
     padding: 30px;
+    overflow-y: auto;
+    flex: 1;
+    overflow-x: hidden;
 }
 
 .detail-modal-footer {
@@ -1182,6 +1188,7 @@ small {
     padding: 20px 30px;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
     background: rgba(255, 255, 255, 0.05);
+    flex-shrink: 0;
 }
 
 /* 模态框样式 */
@@ -1193,23 +1200,31 @@ small {
     top: 0;
     width: 100%;
     height: 100%;
-    overflow: auto;
     background-color: rgba(0, 0, 0, 0.7);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
 }
 
+.modal.show {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+}
+
 .modal-content {
     background: linear-gradient(135deg, #0a1128 0%, #1e3a8a 50%, #1d4ed8 100%);
     position: relative;
-    margin: 20px auto;
+    top: auto;
+    left: auto;
+    transform: none;
+    margin: 20px;
     padding: 0;
     border-radius: 24px;
-    width: 95%;
+    width: 100%;
     max-width: 1000px;
     max-height: 90vh;
-    overflow-y: auto;
-    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05), 0 0 0 2px rgba(0, 0, 0, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.2);
 }
@@ -1277,6 +1292,9 @@ small {
 
 .modal-body {
     padding: 30px;
+    overflow-y: auto;
+    flex: 1;
+    overflow-x: hidden;
 }
 
 .modal-footer {
@@ -1286,6 +1304,7 @@ small {
     border-top: 1px solid rgba(255, 255, 255, 0.1);
     background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 100%);
     position: relative;
+    flex-shrink: 0;
 }
 
 .modal-footer::before {
@@ -1508,6 +1527,487 @@ select option:checked {
     min-height: 100px;
 }
 
+/* 日期选择器样式 */
+.date-picker {
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+}
+
+.date-picker::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    opacity: 0.6;
+    transition: var(--transition);
+    filter: invert(1);
+}
+
+.date-picker::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+}
+
+.date-hint {
+    display: block;
+    margin-top: 6px;
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.5);
+    transition: var(--transition);
+}
+
+.date-error {
+    display: none;
+    margin-top: 4px;
+    font-size: 11px;
+    color: #ff4757;
+    transition: var(--transition);
+}
+
+.date-error.show {
+    display: block;
+}
+
+.date-picker:focus + .date-hint {
+    color: rgba(0, 212, 255, 0.8);
+}
+
+/* 日期选择器错误状态 */
+.date-picker.error {
+    border-color: #ff4757 !important;
+    background: rgba(255, 71, 87, 0.1) !important;
+}
+
+.date-picker.error + .date-hint {
+    color: #ff4757 !important;
+}
+
+/* 日期选择器禁用状态 */
+.date-picker:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* 自定义日期选择器容器 */
+.custom-date-picker {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.date-input {
+    width: 100%;
+    padding: 12px 48px 12px 16px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+    color: var(--text-primary);
+    font-size: 14px;
+    transition: var(--transition);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    cursor: pointer;
+}
+
+.date-input:hover {
+    border-color: rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.date-input:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.date-input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.date-toggle-btn {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+}
+
+.date-toggle-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-50%) scale(1.05);
+}
+
+.date-toggle-btn:active {
+    transform: translateY(-50%) scale(0.95);
+}
+
+/* 日期选择器弹窗 */
+.date-picker-modal {
+    display: none;
+    position: fixed;
+    z-index: 3000;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.date-picker-modal.active {
+    display: flex;
+}
+
+.date-picker-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+.date-picker-container {
+    position: relative;
+    width: 100%;
+    max-width: 440px;
+    max-height: 90vh;
+    background: linear-gradient(135deg, #0a1128 0%, #1e3a8a 50%, #1d4ed8 100%);
+    border-radius: 24px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05), 0 0 0 2px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    animation: modalFadeIn 0.2s ease-out;
+    display: flex;
+    flex-direction: column;
+}
+
+.date-picker-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+}
+
+@keyframes modalFadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+/* 日期选择器头部 */
+.date-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 20px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.04) 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+}
+
+.date-picker-header::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 120, 0, 0.3), transparent);
+}
+
+.nav-btn {
+    width: 44px;
+    height: 44px;
+    border: none;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+    flex-shrink: 0;
+}
+
+.nav-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.nav-btn:active {
+    transform: translateY(0);
+}
+
+.month-year-selector {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.month-select,
+.year-select {
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+    cursor: pointer;
+    min-width: 80px;
+    transition: var(--transition);
+}
+
+.month-select:hover,
+.year-select:hover {
+    border-color: rgba(255, 255, 255, 0.4);
+}
+
+.month-select:focus,
+.year-select:focus {
+    outline: none;
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+}
+
+/* 星期标题 */
+.date-picker-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    padding: 12px 8px;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.weekday {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 40px;
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.6);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* 日期网格 */
+.date-picker-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+    padding: 12px 8px;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.date-day {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    min-width: 44px;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--text-primary);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: var(--transition);
+    user-select: none;
+    -webkit-user-select: none;
+    position: relative;
+}
+
+.date-day:hover {
+    background: rgba(255, 255, 255, 0.15);
+    transform: scale(1.05);
+}
+
+.date-day:active {
+    transform: scale(0.95);
+}
+
+.date-day.other-month {
+    color: rgba(255, 255, 255, 0.25);
+}
+
+.date-day.today {
+    position: relative;
+}
+
+.date-day.today::after {
+    content: '';
+    position: absolute;
+    bottom: 4px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent-color);
+}
+
+.date-day.selected {
+    background: var(--accent-color);
+    color: var(--primary-bg);
+    font-weight: 600;
+}
+
+.date-day.selected:hover {
+    background: #00c4e6;
+}
+
+.date-day.disabled {
+    color: rgba(255, 255, 255, 0.2);
+    cursor: not-allowed;
+}
+
+.date-day.disabled:hover {
+    background: transparent;
+    transform: none;
+}
+
+/* 日期选择器底部 */
+.date-picker-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 20px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.08) 100%);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+}
+
+.date-picker-footer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 120, 0, 0.3), transparent);
+}
+
+/* 日期选择器按钮 */
+#clearDateBtn,
+#confirmDateBtn {
+    padding: 12px 24px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    border: none;
+}
+
+#clearDateBtn {
+    background: rgba(255, 255, 255, 0.1);
+    color: var(--text-primary);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+#clearDateBtn:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.3);
+}
+
+#confirmDateBtn {
+    background: linear-gradient(135deg, #ff7800 0%, #ff9500 100%);
+    color: white;
+    box-shadow: 0 4px 15px rgba(255, 120, 0, 0.3);
+}
+
+#confirmDateBtn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(255, 120, 0, 0.4);
+}
+
+#confirmDateBtn:active {
+    transform: translateY(0);
+}
+
+/* 移动端优化 */
+@media (max-width: 480px) {
+    .date-picker-container {
+        max-width: 100%;
+        margin: 8px;
+        border-radius: 16px;
+    }
+    
+    .date-picker-header {
+        padding: 16px 12px;
+    }
+    
+    .nav-btn {
+        width: 40px;
+        height: 40px;
+    }
+    
+    .month-select,
+    .year-select {
+        padding: 6px 10px;
+        font-size: 13px;
+        min-width: 65px;
+    }
+    
+    .date-picker-weekdays {
+        padding: 10px 4px;
+    }
+    
+    .weekday {
+        height: 36px;
+        font-size: 12px;
+    }
+    
+    .date-picker-days {
+        gap: 3px;
+        padding: 10px 4px;
+    }
+    
+    .date-day {
+        min-height: 42px;
+        min-width: 42px;
+        font-size: 14px;
+        border-radius: 10px;
+    }
+    
+    .date-picker-footer {
+        padding: 12px;
+    }
+}
+
+/* 平板设备优化 */
+@media (min-width: 481px) and (max-width: 768px) {
+    .date-picker-container {
+        max-width: 380px;
+    }
+    
+    .date-day {
+        min-height: 46px;
+        min-width: 46px;
+        font-size: 16px;
+    }
+}
+
 /* 状态和进度控制 */
 .status-progress-controls {
     display: flex;
@@ -1563,6 +2063,18 @@ select option:checked {
     background: linear-gradient(135deg, #ff3d71 0%, #cc305b 100%);
     color: white;
     border-color: #ff3d71;
+}
+
+.status-btn.status-complete {
+    background: linear-gradient(135deg, #00d26a 0%, #00a850 100%);
+    color: white;
+    border-color: #00d26a;
+}
+
+.status-btn.status-complete.active {
+    background: linear-gradient(135deg, #00d26a 0%, #00a850 100%);
+    color: white;
+    border-color: #00d26a;
 }
 
 .status-input {
@@ -1796,22 +2308,18 @@ select option:checked {
 @keyframes modalSlideIn {
     from {
         opacity: 0;
-        transform: translateY(-50px);
     }
     to {
         opacity: 1;
-        transform: translateY(0);
     }
 }
 
 @-webkit-keyframes modalSlideIn {
     from {
         opacity: 0;
-        -webkit-transform: translateY(-50px);
     }
     to {
         opacity: 1;
-        -webkit-transform: translateY(0);
     }
 }
 
@@ -1954,20 +2462,36 @@ select option:checked {
         grid-template-columns: 1fr;
     }
     
-    #projectModal .modal-content {
-        width: 100%;
-        margin: 0;
-        max-height: 100vh;
-        border-radius: 0;
+    .modal,
+    .detail-modal {
+        padding: 10px;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
     }
     
-    #projectModal .modal-header,
-    #projectModal .modal-body,
-    #projectModal .modal-footer {
+    .modal-content,
+    .detail-modal-content {
+        width: 100%;
+        margin: 0 auto;
+        max-height: calc(100vh - 20px);
+        border-radius: 16px;
+        position: relative;
+        top: auto;
+        left: auto;
+        transform: none;
+    }
+    
+    .modal-header,
+    .modal-body,
+    .modal-footer,
+    .detail-modal-header,
+    .detail-modal-body,
+    .detail-modal-footer {
         padding: 15px 20px;
     }
     
-    #projectModal .modal-header h2 {
+    .modal-header h2 {
         font-size: 20px;
     }
     
@@ -1988,28 +2512,9 @@ select option:checked {
         flex-direction: column;
         align-items: flex-start;
     }
-    
+
     .status-input input {
         min-width: 100%;
-    }
-    
-    .progress-controls {
-        flex-direction: column;
-        align-items: center;
-    }
-    
-    .progress-controls .progress-bar {
-        margin-right: 0;
-        margin-bottom: 20px;
-        width: 100%;
-    }
-    
-    .history-modal-dialog,
-    .detail-modal-content {
-        width: 100%;
-        margin: 0;
-        max-height: 100vh;
-        border-radius: 0;
     }
 }
 
@@ -2040,106 +2545,115 @@ select option:checked {
         font-size: clamp(10px, 2.2vw, 11px);
     }
     
-    /* 项目卡片移动端优化 */
+    /* 项目卡片移动端优化 - 紧凑布局 */
     .project-card {
-        border-radius: clamp(12px, 3vw, 16px);
+        border-radius: clamp(10px, 2.5vw, 14px);
         overflow: hidden;
     }
     
     .project-card-image {
-        padding-bottom: 65%;
-        border-radius: clamp(10px, 2.5vw, 14px) clamp(10px, 2.5vw, 14px) 0 0;
+        padding-bottom: 55%; /* 减小图片高度 */
+        border-radius: clamp(8px, 2vw, 12px) clamp(8px, 2vw, 12px) 0 0;
     }
     
     .project-card-image img {
-        border-radius: clamp(10px, 2.5vw, 14px) clamp(10px, 2.5vw, 14px) 0 0;
+        border-radius: clamp(8px, 2vw, 12px) clamp(8px, 2vw, 12px) 0 0;
     }
     
     .project-card-content {
-        padding: clamp(15px, 4vw, 20px);
-        gap: clamp(12px, 3vw, 15px);
+        padding: clamp(10px, 2.5vw, 14px); /* 减小内边距 */
+        gap: clamp(8px, 2vw, 10px); /* 减小元素间距 */
     }
     
     .project-card-header {
         flex-direction: column;
         align-items: flex-start;
-        gap: clamp(8px, 2vw, 10px);
-        padding-bottom: clamp(10px, 2.5vw, 12px);
+        gap: clamp(4px, 1vw, 6px); /* 减小间距 */
+        padding-bottom: clamp(6px, 1.5vw, 8px); /* 减小底部间距 */
     }
     
     .project-name {
-        font-size: clamp(16px, 4.5vw, 18px);
-        line-height: 1.3;
+        font-size: clamp(15px, 4vw, 17px);
+        line-height: 1.25; /* 紧凑行高 */
         word-break: break-word;
         hyphens: auto;
         -webkit-hyphens: auto;
+        margin: 0; /* 移除默认margin */
     }
     
     .status-tag {
-        padding: clamp(6px, 1.5vw, 8px) clamp(12px, 3vw, 14px);
-        font-size: clamp(10px, 2.2vw, 11px);
+        padding: clamp(4px, 1vw, 6px) clamp(10px, 2.5vw, 12px); /* 减小内边距 */
+        font-size: clamp(9px, 2vw, 10px);
         align-self: flex-start;
     }
     
     .project-card-info {
-        grid-template-columns: 1fr;
-        gap: clamp(10px, 2.5vw, 12px);
+        grid-template-columns: repeat(2, 1fr); /* 改为两列布局 */
+        gap: clamp(6px, 1.5vw, 8px); /* 减小间距 */
     }
     
     .project-card-info-item {
-        padding: clamp(10px, 2.5vw, 12px);
+        padding: clamp(8px, 2vw, 10px); /* 减小内边距 */
+        border-radius: 8px;
     }
     
     .project-card-info-label {
-        font-size: clamp(10px, 2.2vw, 11px);
+        font-size: clamp(9px, 2vw, 10px);
+        margin-bottom: 2px; /* 减小标签与值的间距 */
     }
     
     .project-card-info-value {
-        font-size: clamp(13px, 3.5vw, 14px);
+        font-size: clamp(12px, 3vw, 13px);
+        line-height: 1.3; /* 紧凑行高 */
     }
     
     .project-card-progress {
-        flex-direction: column;
+        flex-direction: row; /* 改为水平布局，节省垂直空间 */
         align-items: center;
-        text-align: center;
-        gap: clamp(10px, 2.5vw, 12px);
+        justify-content: space-between;
+        gap: clamp(8px, 2vw, 10px);
     }
     
     .progress-bar {
-        height: clamp(6px, 1.5vw, 8px);
+        flex: 1; /* 进度条占据剩余空间 */
+        height: clamp(5px, 1.2vw, 6px);
     }
     
     .progress-details {
         margin-top: 0;
-        text-align: center;
+        text-align: right;
+        white-space: nowrap;
     }
     
     .progress-percentage {
-        font-size: clamp(16px, 4.5vw, 18px);
+        font-size: clamp(14px, 3.5vw, 16px);
     }
     
     .project-card-remarks {
-        padding: clamp(10px, 2.5vw, 12px);
+        padding: clamp(8px, 2vw, 10px); /* 减小内边距 */
+        border-radius: 8px;
     }
     
     .project-card-remarks p {
-        font-size: clamp(12px, 3vw, 13px);
-        line-height: 1.5;
+        font-size: clamp(11px, 2.8vw, 12px);
+        line-height: 1.4; /* 紧凑行高 */
         display: -webkit-box;
-        -webkit-line-clamp: 3;
+        -webkit-line-clamp: 2; /* 限制为2行 */
         -webkit-box-orient: vertical;
         overflow: hidden;
+        margin: 0;
     }
     
     .project-card-actions {
-        flex-direction: column;
-        gap: clamp(8px, 2vw, 10px);
+        flex-direction: row; /* 改为水平布局 */
+        gap: clamp(6px, 1.5vw, 8px);
     }
     
     .project-card-actions .btn {
-        width: 100%;
-        min-height: clamp(38px, 10vw, 42px);
-        font-size: clamp(12px, 3vw, 13px);
+        flex: 1;
+        min-height: clamp(32px, 8vw, 36px);
+        font-size: clamp(11px, 2.8vw, 12px);
+        padding: 6px 8px;
     }
     
     .drop-zone {
@@ -2310,4 +2824,41 @@ select option:checked {
 
 .no-projects .btn {
     margin-top: 20px;
+}
+
+/* ==================== 页面过渡动画 ==================== */
+.page-transition {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--primary-bg);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.page-transition.active {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.page-transition-spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid var(--border-color);
+    border-top-color: var(--accent-color);
+    border-radius: 50%;
+    animation: pageSpinnerSpin 1s linear infinite;
+}
+
+@keyframes pageSpinnerSpin {
+    to {
+        transform: rotate(360deg);
+    }
 }

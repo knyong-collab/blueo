@@ -149,12 +149,21 @@ const DEFAULT_USERS = {
 
 // 检查是否已登录
 async function checkLoginStatus() {
+    // 首先检查 sessionStorage 中的登录状态
+    const storedLoginStatus = sessionStorage.getItem('isLoggedIn');
+    if (storedLoginStatus === 'true') {
+        // 如果 sessionStorage 中有登录状态，先显示主应用
+        return true;
+    }
+    
     if (!supabaseClient) return false;
     
     try {
         const { data: { session } } = await supabaseClient.auth.getSession();
         if (session) {
             currentUser = session.user;
+            // 将登录状态存储到 sessionStorage
+            sessionStorage.setItem('isLoggedIn', 'true');
             return true;
         }
     } catch (error) {
@@ -231,6 +240,8 @@ async function logout() {
             console.error('退出登录失败:', error);
         }
     }
+    // 清除 sessionStorage 中的登录状态
+    sessionStorage.removeItem('isLoggedIn');
     currentUser = null;
     showLoginScreen();
 }
@@ -322,6 +333,9 @@ function loadProjectsFromFileSystem(file) {
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', async function() {
+    // 先初始化 Supabase 客户端
+    await initSupabaseClient();
+    
     // 检查登录状态
     const isLoggedIn = await checkLoginStatus();
     if (isLoggedIn) {
@@ -336,7 +350,28 @@ document.addEventListener('DOMContentLoaded', async function() {
 
     // 检查数据备份状态
     checkBackupStatus();
+    
+    // 初始化窗口大小调整处理
+    initializeResizeHandler();
 });
+
+// 初始化窗口大小调整处理
+function initializeResizeHandler() {
+    let resizeTimeout;
+    
+    window.addEventListener('resize', function() {
+        // 防抖处理：只有在调整停止后才执行
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(function() {
+            updateModalPosition();
+        }, 100);
+    });
+}
+
+// 更新模态框位置 - 不再需要，CSS flexbox自动居中
+function updateModalPosition() {
+    // CSS flexbox已经处理了居中，此函数不再需要
+}
 
 // 检查数据备份状态
 function checkBackupStatus() {
@@ -377,6 +412,8 @@ function initializeLoginForm() {
         
         const success = await login(email, password);
         if (success) {
+            // 设置登录状态到 sessionStorage
+            sessionStorage.setItem('isLoggedIn', 'true');
             showMainApp();
             initializeApp();
         }
@@ -865,6 +902,12 @@ function initializeImageUpload() {
     const imagePreview = document.getElementById('imagePreview');
     const imageUploadSection = document.querySelector('.image-upload-section');
 
+    // 只有当所有必要元素都存在时才初始化图片上传功能
+    if (!dropZone || !fileInput || !imagePreview || !imageUploadSection) {
+        console.log('图片上传元素不存在，跳过初始化');
+        return;
+    }
+
     // 拖拽事件 - 扩大到整个产品图片模块
     imageUploadSection.addEventListener('dragover', function(e) {
         e.preventDefault();
@@ -1063,12 +1106,157 @@ function initializeImageUpload() {
 // 初始化表单
 function initializeForm() {
     const projectForm = document.getElementById('projectForm');
+    const datePicker = document.getElementById('estimatedLaunchDate');
     
-    // 表单提交事件
-    projectForm.addEventListener('submit', async function(e) {
-        e.preventDefault();
-        await saveProject();
-    });
+    // 设置日期选择器范围
+    if (datePicker) {
+        // 获取今天的日期（格式：YYYY-MM-DD）
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0];
+        
+        // 设置最大日期为10年后
+        const maxDate = new Date();
+        maxDate.setFullYear(maxDate.getFullYear() + 10);
+        const maxDateStr = maxDate.toISOString().split('T')[0];
+        
+        // 设置日期范围
+        datePicker.min = todayStr;
+        datePicker.max = maxDateStr;
+        
+        // 添加日期验证事件
+        datePicker.addEventListener('change', validateDate);
+        datePicker.addEventListener('blur', validateDate);
+        datePicker.addEventListener('input', validateDateInput);
+        datePicker.addEventListener('keyup', validateDateInput);
+    }
+}
+
+// 日期验证函数
+function validateDate() {
+    const datePicker = document.getElementById('estimatedLaunchDate');
+    const dateHint = document.querySelector('.date-hint');
+    const dateError = document.getElementById('dateError');
+    
+    if (!datePicker || !dateHint) return;
+    
+    // 移除之前的错误状态
+    datePicker.classList.remove('error');
+    if (dateError) {
+        dateError.classList.remove('show');
+    }
+    
+    const selectedDate = datePicker.value;
+    
+    if (!selectedDate) {
+        // 日期为空，清除提示
+        dateHint.textContent = '请输入日期（格式：YYYY-MM-DD）';
+        dateHint.style.color = '';
+        return;
+    }
+    
+    // 验证日期格式是否正确 (YYYY-MM-DD)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(selectedDate)) {
+        datePicker.classList.add('error');
+        if (dateError) {
+            dateError.textContent = '❌ 日期格式不正确，请输入 YYYY-MM-DD 格式';
+            dateError.classList.add('show');
+        }
+        dateHint.textContent = '请输入日期（格式：YYYY-MM-DD）';
+        dateHint.style.color = '';
+        return;
+    }
+    
+    // 验证日期是否有效
+    const dateParts = selectedDate.split('-');
+    const year = parseInt(dateParts[0]);
+    const month = parseInt(dateParts[1]) - 1; // 月份从0开始
+    const day = parseInt(dateParts[2]);
+    
+    const date = new Date(year, month, day);
+    if (isNaN(date.getTime()) || 
+        date.getFullYear() !== year || 
+        date.getMonth() !== month || 
+        date.getDate() !== day) {
+        datePicker.classList.add('error');
+        if (dateError) {
+            dateError.textContent = '❌ 无效的日期，请检查输入';
+            dateError.classList.add('show');
+        }
+        dateHint.textContent = '请输入日期（格式：YYYY-MM-DD）';
+        dateHint.style.color = '';
+        return;
+    }
+    
+    // 验证日期是否在允许范围内
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (date < today) {
+        datePicker.classList.add('error');
+        if (dateError) {
+            dateError.textContent = '❌ 请选择未来的日期，不能选择过去的日期';
+            dateError.classList.add('show');
+        }
+        dateHint.textContent = '请输入日期（格式：YYYY-MM-DD）';
+        dateHint.style.color = '';
+        return;
+    }
+    
+    // 验证日期是否在最大范围内（10年后）
+    const maxDate = new Date();
+    maxDate.setFullYear(maxDate.getFullYear() + 10);
+    maxDate.setHours(0, 0, 0, 0);
+    
+    if (date > maxDate) {
+        datePicker.classList.add('error');
+        if (dateError) {
+            dateError.textContent = '❌ 日期不能超过10年后';
+            dateError.classList.add('show');
+        }
+        dateHint.textContent = '请输入日期（格式：YYYY-MM-DD）';
+        dateHint.style.color = '';
+        return;
+    }
+    
+    // 日期验证通过
+    dateHint.textContent = '✅ 日期有效';
+    dateHint.style.color = '#2ed573';
+}
+
+// 实时输入验证
+function validateDateInput() {
+    const datePicker = document.getElementById('estimatedLaunchDate');
+    const dateError = document.getElementById('dateError');
+    
+    if (!datePicker) return;
+    
+    let value = datePicker.value;
+    
+    // 只允许数字和连字符
+    value = value.replace(/[^\d-]/g, '');
+    
+    // 限制长度
+    if (value.length > 10) {
+        value = value.substring(0, 10);
+    }
+    
+    // 自动添加连字符
+    if (value.length === 4 && value[4] !== '-') {
+        value = value.substring(0, 4) + '-' + value.substring(4);
+    }
+    if (value.length === 7 && value[7] !== '-') {
+        value = value.substring(0, 7) + '-' + value.substring(7);
+    }
+    
+    datePicker.value = value;
+    
+    // 如果输入完成，进行验证
+    if (value.length === 10) {
+        validateDate();
+    } else if (dateError) {
+        dateError.classList.remove('show');
+    }
 }
 
 // 初始化状态和进度控制
@@ -1080,59 +1268,66 @@ function initializeStatusProgress() {
     const customStatusInput = document.getElementById('customStatus');
     const setCustomStatusBtn = document.getElementById('setCustomStatus');
 
-    // 状态按钮点击事件
-    statusButtons.forEach(btn => {
-        btn.addEventListener('click', function() {
-            const status = this.getAttribute('data-status');
-            statusText.textContent = status;
-            statusText.className = status;
-            
-            // 更新按钮状态
-            statusButtons.forEach(b => b.classList.remove('active'));
-            this.classList.add('active');
-            
-            // 根据状态更新进度条
-            const statusIndex = Array.from(statusButtons).indexOf(this);
-            if (statusIndex >= 0 && statusIndex < 12) { // 12个状态按钮
-                const progress = ((statusIndex + 1) / 12) * 100;
-                progressFill.style.width = `${progress}%`;
-                progressPercentage.textContent = `${Math.round(progress)}%`;
+    // 状态按钮点击事件（只有当statusButtons存在时才绑定）
+    if (statusButtons.length > 0 && statusText && progressFill && progressPercentage) {
+        statusButtons.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const status = this.getAttribute('data-status');
+                const progress = parseInt(this.getAttribute('data-progress'));
                 
-                // 更新圆形进度条
-                const circularProgressFill = document.getElementById('circularProgressFill');
-                if (circularProgressFill) {
-                    const dashOffset = 226 - (226 * progress / 100);
-                    circularProgressFill.style.strokeDashoffset = dashOffset;
-                    const circularProgressText = circularProgressFill.parentElement.nextElementSibling;
-                    if (circularProgressText) {
-                        circularProgressText.textContent = `${Math.round(progress)}%`;
+                statusText.textContent = status;
+                statusText.className = status;
+                
+                // 更新按钮状态
+                statusButtons.forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                
+                // 根据状态更新进度条（项目暂停不更新进度）
+                if (progress >= 0) {
+                    progressFill.style.width = `${progress}%`;
+                    progressPercentage.textContent = `${progress}%`;
+                    
+                    // 更新圆形进度条
+                    const circularProgressFill = document.getElementById('circularProgressFill');
+                    if (circularProgressFill) {
+                        const circumference = 2 * Math.PI * 30; // 半径为30的圆的周长
+                        const dashOffset = circumference - (circumference * progress / 100);
+                        circularProgressFill.style.strokeDashoffset = dashOffset;
+                        const circularProgressText = circularProgressFill.parentElement.nextElementSibling;
+                        if (circularProgressText) {
+                            circularProgressText.textContent = `${progress}%`;
+                        }
                     }
                 }
+            });
+        });
+    }
+
+    // 自定义状态设置（只有当按钮和输入框都存在时才绑定）
+    if (setCustomStatusBtn && customStatusInput && statusText) {
+        setCustomStatusBtn.addEventListener('click', function() {
+            const customStatus = customStatusInput.value.trim();
+            if (customStatus) {
+                statusText.textContent = customStatus;
+                statusText.className = '';
+                
+                // 重置状态按钮
+                if (statusButtons.length > 0) {
+                    statusButtons.forEach(b => b.classList.remove('active'));
+                }
+                
+                // 清空输入框
+                customStatusInput.value = '';
             }
         });
-    });
 
-    // 自定义状态设置
-    setCustomStatusBtn.addEventListener('click', function() {
-        const customStatus = customStatusInput.value.trim();
-        if (customStatus) {
-            statusText.textContent = customStatus;
-            statusText.className = '';
-            
-            // 重置状态按钮
-            statusButtons.forEach(b => b.classList.remove('active'));
-            
-            // 清空输入框
-            customStatusInput.value = '';
-        }
-    });
-
-    // 按Enter键设置自定义状态
-    customStatusInput.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') {
-            setCustomStatusBtn.click();
-        }
-    });
+        // 按Enter键设置自定义状态
+        customStatusInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                setCustomStatusBtn.click();
+            }
+        });
+    }
 }
 
 // 初始化模态框
@@ -1143,61 +1338,48 @@ function initializeModal() {
     const copyLinkBtn = document.getElementById('copyLink');
     const shareUrl = document.getElementById('shareUrl');
 
-    shareBtn.addEventListener('click', function() {
-        shareModal.style.display = 'block';
-        // 生成分享链接
-        shareUrl.value = window.location.href;
-    });
+    if (shareBtn && shareModal && shareUrl) {
+        shareBtn.addEventListener('click', function() {
+            shareModal.style.display = 'block';
+            // 生成分享链接
+            shareUrl.value = window.location.href;
+        });
+    }
 
-    closeBtn.addEventListener('click', function() {
-        shareModal.style.display = 'none';
-    });
+    if (closeBtn && shareModal) {
+        closeBtn.addEventListener('click', function() {
+            shareModal.style.display = 'none';
+        });
+    }
 
-    copyLinkBtn.addEventListener('click', function() {
-        shareUrl.select();
-        document.execCommand('copy');
-        alert('链接已复制到剪贴板');
-    });
+    if (copyLinkBtn && shareUrl) {
+        copyLinkBtn.addEventListener('click', function() {
+            shareUrl.select();
+            document.execCommand('copy');
+            alert('链接已复制到剪贴板');
+        });
+    }
 
     // 点击模态框外部关闭
-    window.addEventListener('click', function(e) {
-        if (e.target === shareModal) {
-            shareModal.style.display = 'none';
-        }
-    });
-}
-
-// 显示项目弹窗
-function showProjectModal() {
-    const modal = document.getElementById('projectModal');
-    if (modal) {
-        modal.style.display = 'block';
-        modal.classList.add('show');
-        document.body.style.overflow = 'hidden'; // 防止背景滚动
-    }
-}
-
-// 隐藏项目弹窗
-function hideProjectModal() {
-    const modal = document.getElementById('projectModal');
-    if (modal) {
-        modal.style.display = 'none';
-        modal.classList.remove('show');
-        document.body.style.overflow = ''; // 恢复背景滚动
+    if (shareModal) {
+        window.addEventListener('click', function(e) {
+            if (e.target === shareModal) {
+                shareModal.style.display = 'none';
+            }
+        });
     }
 }
 
 // 初始化事件监听器
 function initializeEventListeners() {
-    // 保存项目按钮
-    const saveBtn = document.getElementById('saveBtn');
-    if (saveBtn) {
-        saveBtn.addEventListener('click', async function() {
+    // 注意：index.html中的保存按钮已移至initializeModalEvents中绑定
+    // 以下是edit.html页面的保存按钮绑定（如果edit.html加载了script.js）
+    const editPageSaveBtn = document.getElementById('saveBtn');
+    if (editPageSaveBtn && document.getElementById('projectForm')) {
+        editPageSaveBtn.addEventListener('click', async function() {
             console.log('保存按钮被点击');
             await saveProject();
         });
-    } else {
-        console.error('保存按钮未找到');
     }
     
     // 导出HTML按钮
@@ -1220,50 +1402,17 @@ function initializeEventListeners() {
         });
     }
     
-    // 新增项目按钮
+    // 新增项目按钮 - 跳转到编辑页面
     const newProjectBtn = document.getElementById('newProjectBtn');
     if (newProjectBtn) {
         newProjectBtn.addEventListener('click', function() {
-            // 清空表单
-            document.getElementById('projectForm').reset();
-            
-            // 重置状态和进度
-            document.getElementById('statusText').textContent = '未设置';
-            document.querySelectorAll('.status-btn').forEach(btn => btn.classList.remove('active'));
-            
-            // 重置进度条
-            document.getElementById('progressFill').style.width = '0%';
-            document.getElementById('progressPercentage').textContent = '0%';
-            document.querySelectorAll('.step').forEach(step => step.classList.remove('active'));
-            
-            // 清空图片
-            uploadedImages = [];
-            updateImagePreview();
-            
-            // 重置项目ID
-            currentProjectId = null;
-            
-            // 显示弹窗
-            showProjectModal();
+            // 清除可能存在的编辑项目ID，确保是新增模式
+            sessionStorage.removeItem('currentEditProjectId');
+            // 页面跳转到编辑页面
+            window.location.href = 'edit.html';
         });
     }
-    
-    // 关闭弹窗按钮
-    const closeModalBtn = document.getElementById('closeModalBtn');
-    if (closeModalBtn) {
-        closeModalBtn.addEventListener('click', hideProjectModal);
-    }
-    
-    // 点击弹窗外部关闭弹窗
-    const projectModal = document.getElementById('projectModal');
-    if (projectModal) {
-        projectModal.addEventListener('click', function(e) {
-            if (e.target === projectModal) {
-                hideProjectModal();
-            }
-        });
-    }
-    
+
     // 排序控件
     const sortBy = document.getElementById('sortBy');
     if (sortBy) {
@@ -1300,6 +1449,7 @@ function initializeEventListeners() {
     if (importFile) {
         importFile.addEventListener('change', importProjectData);
     }
+
 }
 
 // 保存项目
@@ -1326,7 +1476,7 @@ async function saveProject() {
         console.log('项目名称:', projectName);
         console.log('品牌:', brand);
         console.log('产品类别:', productCategory);
-        console.log('产品类型:', productType);
+        console.log('项目类型:', productType);
         console.log('优先级:', priority);
         console.log('预计上市:', estimatedLaunchDate);
 
@@ -1423,28 +1573,33 @@ async function saveProject() {
         // 标记这是自己的更新，避免实时同步重复处理
         markOwnUpdate(project.id);
 
-        // 保存到Supabase（唯一存储方式）
+        // 先保存到本地缓存（优先保证本地保存）
+        saveProjectsToLocalCache(projects);
+        console.log('[Cache] ✅ 项目已保存到本地缓存');
+
+        // 保存到Supabase（失败不影响本地保存）
         try {
             await saveToSupabase(project);
             console.log('[Sync] ✅ 项目已保存到云端');
         } catch (supabaseError) {
             console.error('[Sync] ❌ Supabase保存失败:', supabaseError);
-            throw supabaseError;
+            // 云端保存失败不影响本地保存，只显示警告
+            console.warn('[Sync] 云端保存失败，但项目已保存到本地缓存');
         }
-        
+
         // 更新项目列表
         updateProjectList();
         console.log('项目列表更新成功');
-        
+
         alert('项目保存成功');
         console.log('保存流程完成');
-        
+
         // 重置当前编辑的项目ID，以便下次保存时能够正确创建新项目
         currentEditProjectId = null;
-        
-        // 关闭弹窗
-        hideProjectModal();
-        
+
+        // 返回主页
+        window.location.href = 'index.html';
+
     } catch (error) {
         console.error('保存项目时出错:', error);
         alert('保存失败：' + error.message);
@@ -2071,12 +2226,12 @@ function exportHTML() {
                                 <div class="info-value">${project.brand || '未设置'}</div>
                             </div>
                             <div class="info-item">
-                                <div class="info-label">类别</div>
+                                <div class="info-label">项目类型</div>
                                 <div class="info-value">${project.category}</div>
                             </div>
                             <div class="info-item">
-                                <div class="info-label">类型</div>
-                                <div class="info-value">${project.productType}</div>
+                                <div class="info-label">项目情况</div>
+                                <div class="info-value">${project.status || '未设置'}</div>
                             </div>
                             <div class="info-item" ${project.launchDate ? `data-launch-date="${project.launchDate}"` : ''}>
                                 <div class="info-label">优先级</div>
@@ -2100,7 +2255,7 @@ function exportHTML() {
                             </div>
                             <div class="progress-details">
                                 <p><strong>进度:</strong> ${project.progress}</p>
-                                ${project.launchDate ? `<p><strong>上市:</strong> ${project.launchDate}</p>` : ''}
+                                <p><strong>上市:</strong> ${project.launchDate || '未设置'}</p>
                             </div>
                         </div>
                         ${project.remarks && project.remarks.length > 0 ? `
@@ -2137,16 +2292,13 @@ function exportHTML() {
                 
                 switch(sortBy) {
                     case 'launchDate':
-                        // 按上市日期排序，时间越靠前的排在前面
+                        // 按上市日期排序，时间越近的排在前面（降序）
                         sortedCards.sort((a, b) => {
-                            const dateA = a.dataset.launchDate || '';
-                            const dateB = b.dataset.launchDate || '';
-                            // 空日期排在最后
-                            if (!dateA && !dateB) return 0;
-                            if (!dateA) return 1;
-                            if (!dateB) return -1;
-                            // 时间越靠前的排在前面
-                            return new Date(dateA) - new Date(dateB);
+                            // 从data属性获取日期，如果没有则设置为最小日期（排在最后）
+                            const dateA = a.dataset.launchDate ? new Date(a.dataset.launchDate) : new Date(0);
+                            const dateB = b.dataset.launchDate ? new Date(b.dataset.launchDate) : new Date(0);
+                            // 时间越近的排在前面（降序）
+                            return dateB - dateA;
                         });
                         break;
                     case 'priority':
@@ -2247,11 +2399,11 @@ async function exportImage() {
         return;
     }
     
-    // 按上市时间排序，时间早的靠前
+    // 按上市时间排序，时间越近的靠前（降序）
     const sortedProjects = [...projects].sort((a, b) => {
-        const dateA = a.launchDate ? new Date(a.launchDate) : new Date(9999, 11, 31); // 无日期的项目排在最后
-        const dateB = b.launchDate ? new Date(b.launchDate) : new Date(9999, 11, 31);
-        return dateA - dateB;
+        const dateA = a.launchDate ? new Date(a.launchDate) : new Date(0); // 无日期的项目排在最后
+        const dateB = b.launchDate ? new Date(b.launchDate) : new Date(0);
+        return dateB - dateA;
     });
     
     // 创建一个临时的HTML元素来生成图片内容
@@ -2311,12 +2463,12 @@ async function exportImage() {
                                     <div style="font-size: 14px; font-weight: 600; color: rgba(255, 255, 255, 0.9);">${project.brand || '未设置'}</div>
                                 </div>
                                 <div style="display: flex; flex-direction: column; padding: 12px 15px; background: rgba(255, 255, 255, 0.1); border-radius: 10px; backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1);">
-                                    <div style="font-size: 11px; color: rgba(255, 255, 255, 0.6); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">类别</div>
+                                    <div style="font-size: 11px; color: rgba(255, 255, 255, 0.6); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">项目类型</div>
                                     <div style="font-size: 14px; font-weight: 600; color: rgba(255, 255, 255, 0.9);">${project.category}</div>
                                 </div>
                                 <div style="display: flex; flex-direction: column; padding: 12px 15px; background: rgba(255, 255, 255, 0.1); border-radius: 10px; backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1);">
-                                    <div style="font-size: 11px; color: rgba(255, 255, 255, 0.6); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">类型</div>
-                                    <div style="font-size: 14px; font-weight: 600; color: rgba(255, 255, 255, 0.9);">${project.productType}</div>
+                                    <div style="font-size: 11px; color: rgba(255, 255, 255, 0.6); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">项目情况</div>
+                                    <div style="font-size: 14px; font-weight: 600; color: rgba(255, 255, 255, 0.9);">${project.status || '未设置'}</div>
                                 </div>
                                 <div style="display: flex; flex-direction: column; padding: 12px 15px; background: rgba(255, 255, 255, 0.1); border-radius: 10px; backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1);">
                                     <div style="font-size: 11px; color: rgba(255, 255, 255, 0.6); text-transform: uppercase; margin-bottom: 6px; letter-spacing: 0.5px;">优先级</div>
@@ -2339,7 +2491,7 @@ async function exportImage() {
                                 </div>
                                 <div style="flex: 1;">
                                     <p style="margin: 6px 0; font-size: 14px; color: rgba(255, 255, 255, 0.8);"><strong>进度:</strong> ${project.progress}</p>
-                                    ${project.launchDate ? `<p style="margin: 6px 0; font-size: 14px; color: rgba(255, 255, 255, 0.8);"><strong>上市:</strong> ${project.launchDate}</p>` : ''}
+                                    <p style="margin: 6px 0; font-size: 14px; color: rgba(255, 255, 255, 0.8);"><strong>上市:</strong> ${project.launchDate || '未设置'}</p>
                                 </div>
                             </div>
                             ${project.remarks && project.remarks.length > 0 ? `
@@ -2561,11 +2713,11 @@ function filterProjects(searchTerm) {
             });
             break;
         case 'launchDate':
-            // 按上市时间排序，时间越早的在前
+            // 按上市时间排序，时间越近的在前（降序）
             sortedProjects.sort((a, b) => {
-                const dateA = a.launchDate ? new Date(a.launchDate) : new Date(9999, 11, 31);
-                const dateB = b.launchDate ? new Date(b.launchDate) : new Date(9999, 11, 31);
-                return dateA - dateB;
+                const dateA = a.launchDate ? new Date(a.launchDate) : new Date(0);
+                const dateB = b.launchDate ? new Date(b.launchDate) : new Date(0);
+                return dateB - dateA;
             });
             break;
         default:
@@ -2599,6 +2751,11 @@ function filterProjects(searchTerm) {
         const progressValue = parseInt(project.progress) || 0;
         const projectCard = document.createElement('div');
         projectCard.className = 'project-card';
+        projectCard.dataset.priority = project.priority;
+        projectCard.dataset.progress = project.progress.replace('%', '');
+        if (project.launchDate) {
+            projectCard.dataset.launchDate = project.launchDate;
+        }
         
         // 获取项目主图
         let mainImage = '';
@@ -2650,7 +2807,6 @@ function filterProjects(searchTerm) {
             <div class="project-card-content">
                 <div class="project-card-header">
                     <h3>${project.name}</h3>
-                    <span class="status-tag ${project.status}">${project.status}</span>
                 </div>
                 <div class="project-card-info">
                     <div class="info-item">
@@ -2658,12 +2814,12 @@ function filterProjects(searchTerm) {
                         <span class="info-value">${project.brand || '未设置'}</span>
                     </div>
                     <div class="info-item">
-                        <span class="info-label">类别</span>
+                        <span class="info-label">项目类型</span>
                         <span class="info-value">${project.category}</span>
                     </div>
                     <div class="info-item">
-                        <span class="info-label">类型</span>
-                        <span class="info-value">${project.productType || '未设置'}</span>
+                        <span class="info-label">项目情况</span>
+                        <span class="info-value">${project.status || '未设置'}</span>
                     </div>
                     <div class="info-item">
                         <span class="info-label">优先级</span>
@@ -2687,18 +2843,18 @@ function filterProjects(searchTerm) {
                     </div>
                     <div class="progress-details">
                         <p><strong>进度:</strong> ${project.progress}</p>
-                        ${project.launchDate ? `<p><strong>上市:</strong> ${project.launchDate}</p>` : ''}
+                        <p><strong>上市:</strong> ${project.launchDate || '未设置'}</p>
                     </div>
                 </div>
-                ${project.remarks && project.remarks.length > 0 ? `
+                ${latestRemark ? `
                 <div class="project-card-remarks">
-                    <p><strong>最新备注:</strong> ${project.remarks[project.remarks.length - 1].text.substring(0, 30)}${project.remarks[project.remarks.length - 1].text.length > 30 ? '...' : ''}</p>
+                    <p><strong>最新备注:</strong> ${latestRemark.substring(0, 30)}${latestRemark.length > 30 ? '...' : ''}</p>
                 </div>
                 ` : ''}
                 <div class="project-card-actions">
-                    <button class="btn btn-secondary btn-small" onclick="loadProject('${project.id}')">编辑</button>
+                    <button class="btn btn-secondary btn-small" onclick="navigateToEdit('${project.id}')">编辑</button>
                     <button class="btn btn-danger btn-small" onclick="deleteProject('${project.id}')">删除</button>
-                    <button class="btn btn-secondary btn-small" onclick="showDetails('${project.id}')">详情</button>
+                    <button class="btn btn-secondary btn-small" onclick="navigateToDetail('${project.id}')">详情</button>
                 </div>
             </div>
         `;
@@ -2762,18 +2918,39 @@ function loadProject(id) {
         // 更新圆形进度条
         const circularProgressFill = document.getElementById('circularProgressFill');
         if (circularProgressFill) {
-            const dashOffset = 226 - (226 * progress / 100);
+            const circumference = 2 * Math.PI * 30; // 半径为30的圆的周长
+            const dashOffset = circumference - (circumference * progress / 100);
             circularProgressFill.style.strokeDashoffset = dashOffset;
             const circularProgressText = circularProgressFill.parentElement.nextElementSibling;
             if (circularProgressText) {
                 circularProgressText.textContent = project.progress;
             }
         }
-        
-        // 显示弹窗
-        showProjectModal();
+
+        // 跳转到编辑页面
+        navigateToEdit(id);
     }
 }
+
+// 跳转到编辑页面
+function navigateToEdit(projectId) {
+    console.log('[Nav] 跳转到编辑页面，项目ID:', projectId);
+    // 存储当前编辑的项目ID到sessionStorage
+    sessionStorage.setItem('currentEditProjectId', projectId);
+    // 页面跳转
+    window.location.href = 'edit.html?id=' + projectId;
+}
+
+// 跳转到详情页面
+function navigateToDetail(projectId) {
+    console.log('[Nav] 跳转到详情页面，项目ID:', projectId);
+    // 页面跳转
+    window.location.href = 'detail.html?id=' + projectId;
+}
+
+// 确保这些函数在全局作用域中可用
+window.navigateToEdit = navigateToEdit;
+window.navigateToDetail = navigateToDetail;
 
 // 删除项目
 async function deleteProject(id) {
@@ -2796,6 +2973,9 @@ async function deleteProject(id) {
     }
 }
 
+// 确保 deleteProject 函数在全局作用域中可用
+window.deleteProject = deleteProject;
+
 // 从云端加载项目
 async function loadProjects() {
     console.log('[Sync] 🔄 开始从云端加载项目数据...');
@@ -2806,19 +2986,60 @@ async function loadProjects() {
         if (supabaseProjects && supabaseProjects.length > 0) {
             projects = supabaseProjects;
             console.log('[Sync] ✅ 从云端加载成功，共 ' + projects.length + ' 个项目');
+            // 保存到本地缓存
+            saveProjectsToLocalCache(projects);
             updateProjectList();
             return;
         }
         
-        // 如果云端没有数据，初始化空数组
+        // 如果云端没有数据，尝试从本地缓存加载
+        const cachedProjects = loadProjectsFromLocalCache();
+        if (cachedProjects && cachedProjects.length > 0) {
+            projects = cachedProjects;
+            console.log('[Sync] 📦 从本地缓存加载成功，共 ' + projects.length + ' 个项目');
+            updateProjectList();
+            return;
+        }
+        
+        // 如果都没有数据，初始化空数组
         projects = [];
-        console.log('[Sync] 📭 云端无数据，初始化空项目数组');
+        console.log('[Sync] 📭 云端和本地缓存都无数据，初始化空项目数组');
         updateProjectList();
     } catch (error) {
         console.error('[Sync] ❌ 加载项目时出错:', error);
-        // 降级到空数组
-        projects = [];
+        // 降级到本地缓存
+        const cachedProjects = loadProjectsFromLocalCache();
+        if (cachedProjects && cachedProjects.length > 0) {
+            projects = cachedProjects;
+            console.log('[Sync] 📦 降级到本地缓存，共 ' + projects.length + ' 个项目');
+        } else {
+            projects = [];
+        }
         updateProjectList();
+    }
+}
+
+// 保存项目到本地缓存
+function saveProjectsToLocalCache(projectsData) {
+    try {
+        localStorage.setItem('projects_cache', JSON.stringify(projectsData));
+        console.log('[Cache] ✅ 项目数据已保存到本地缓存');
+    } catch (error) {
+        console.error('[Cache] ❌ 保存到本地缓存失败:', error);
+    }
+}
+
+// 从本地缓存加载项目
+function loadProjectsFromLocalCache() {
+    try {
+        const cachedData = localStorage.getItem('projects_cache');
+        if (cachedData) {
+            return JSON.parse(cachedData);
+        }
+        return null;
+    } catch (error) {
+        console.error('[Cache] ❌ 从本地缓存加载失败:', error);
+        return null;
     }
 }
 
@@ -3046,8 +3267,8 @@ function showDetails(projectId) {
             const fields = [
                 { key: 'name', label: '项目名称' },
                 { key: 'brand', label: '品牌' },
-                { key: 'category', label: '产品类别' },
-                { key: 'productType', label: '开发类型' },
+                { key: 'category', label: '项目类型' },
+                { key: 'productType', label: '项目情况' },
                 { key: 'priority', label: '优先级' },
                 { key: 'status', label: '项目状态' },
                 { key: 'progress', label: '完成进度' }
@@ -3108,26 +3329,37 @@ function showDetails(projectId) {
     
     // 创建模态框
     const modal = document.createElement('div');
-    modal.className = 'modal';
-    modal.style.display = 'block';
-    modal.innerHTML = `
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>📋 ${project.name} - 项目详情</h2>
-                <button class="btn-close" onclick="this.parentElement.parentElement.parentElement.remove()">&times;</button>
-            </div>
-            <div class="modal-body">
-                ${detailsHTML}
-            </div>
-        </div>
+    modal.className = 'detail-modal show';
+    modal.style.cssText = 'display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1500; background-color: rgba(0, 0, 0, 0.7); backdrop-filter: blur(10px); align-items: center; justify-content: center;';
+
+    const modalContent = document.createElement('div');
+    modalContent.className = 'detail-modal-content';
+    modalContent.style.cssText = 'position: relative; top: auto; left: auto; transform: none; margin: 20px; padding: 0; width: 100%; max-width: 1000px; max-height: 90vh; overflow-y: auto; background: linear-gradient(135deg, #0a1128 0%, #1e3a8a 50%, #1d4ed8 100%); border-radius: 24px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); border: 1px solid rgba(255, 255, 255, 0.2);';
+
+    const modalHeader = document.createElement('div');
+    modalHeader.className = 'modal-header';
+    modalHeader.style.cssText = 'display: flex; justify-content: space-between; align-items: center; padding: 20px 30px; border-bottom: 1px solid rgba(255, 255, 255, 0.1);';
+    modalHeader.innerHTML = `
+        <h2 style="margin: 0; font-size: 20px; color: white;">📋 ${project.name} - 项目详情</h2>
+        <button class="btn-close" onclick="this.closest('.detail-modal').remove(); document.body.style.overflow = '';">&times;</button>
     `;
-    
+
+    const modalBody = document.createElement('div');
+    modalBody.className = 'modal-body';
+    modalBody.style.cssText = 'padding: 30px; overflow-y: auto; flex: 1;';
+    modalBody.innerHTML = detailsHTML;
+
+    modalContent.appendChild(modalHeader);
+    modalContent.appendChild(modalBody);
+    modal.appendChild(modalContent);
     document.body.appendChild(modal);
-    
+    document.body.style.overflow = 'hidden';
+
     // 点击模态框外部关闭
     modal.addEventListener('click', function(e) {
         if (e.target === modal) {
             modal.remove();
+            document.body.style.overflow = '';
         }
     });
 }

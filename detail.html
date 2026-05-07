@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目详情 - 蓝橙产品开发项目管理</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        /* 详情页面专用样式 */
+        .detail-page {
+            min-height: 100vh;
+            padding: 20px;
+            animation: pageSlideIn 0.4s ease;
+        }
+
+        @keyframes pageSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .detail-container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: var(--secondary-bg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--box-shadow);
+            overflow: hidden;
+        }
+
+        .detail-header {
+            background: linear-gradient(135deg, var(--primary-bg) 0%, var(--secondary-bg) 100%);
+            padding: 30px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .detail-header h1 {
+            margin: 0;
+            font-size: 1.8rem;
+            color: var(--text-color);
+        }
+
+        .detail-header-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .detail-body {
+            padding: 30px;
+        }
+
+        .detail-section {
+            margin-bottom: 30px;
+        }
+
+        .detail-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .detail-section h3 {
+            color: var(--accent-color);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--accent-color);
+        }
+
+        .detail-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .detail-info-item {
+            background: var(--primary-bg);
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .detail-info-item label {
+            display: block;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin-bottom: 5px;
+        }
+
+        .detail-info-item .value {
+            color: var(--text-color);
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .detail-images {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .detail-image-item {
+            aspect-ratio: 1;
+            border-radius: 8px;
+            overflow: hidden;
+            background: var(--primary-bg);
+        }
+
+        .detail-image-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .detail-status {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 500;
+        }
+
+        .detail-status.概念设计 { background: #e3f2fd; color: #1565c0; }
+        .detail-status.产品打样 { background: #e1f5fe; color: #0277bd; }
+        .detail-status.模具开发 { background: #fff3e0; color: #ef6c00; }
+        .detail-status.产前样 { background: #fff8e1; color: #ffa000; }
+        .detail-status.下首单 { background: #fff9c4; color: #f9a825; }
+        .detail-status.大货生产 { background: #fce4ec; color: #c2185b; }
+        .detail-status.首发图 { background: #f3e5f5; color: #7b1fa2; }
+        .detail-status.包装设计 { background: #e8f5e9; color: #2e7d32; }
+        .detail-status.项目暂停 { background: #ffebee; color: #c62828; }
+
+        .detail-progress {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .detail-progress-bar {
+            flex: 1;
+            height: 10px;
+            background: var(--primary-bg);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .detail-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-color), #4CAF50);
+            border-radius: 5px;
+            transition: width 0.3s ease;
+        }
+
+        .detail-progress-text {
+            font-weight: 500;
+            color: var(--accent-color);
+        }
+
+        .detail-remarks {
+            background: var(--primary-bg);
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid var(--accent-color);
+        }
+
+        .detail-remarks-item {
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .detail-remarks-item:last-child {
+            margin-bottom: 0;
+            padding-bottom: 0;
+            border-bottom: none;
+        }
+
+        .detail-remarks-text {
+            color: var(--text-color);
+            margin-bottom: 5px;
+        }
+
+        .detail-remarks-time {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        .detail-history {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .history-card {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .history-time {
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 0.9rem;
+        }
+
+        .history-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: linear-gradient(135deg, #00d4ff 0%, #7c3aed 100%);
+            color: white;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .history-fields {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .history-field {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            border: 1px solid transparent;
+        }
+
+        .history-field.changed {
+            border-color: rgba(0, 212, 255, 0.3);
+            background: rgba(0, 212, 255, 0.05);
+        }
+
+        .field-label {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.85rem;
+        }
+
+        .field-value {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 0.85rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .field-value .old-value {
+            color: #ef4444;
+            text-decoration: line-through;
+            font-weight: 400;
+        }
+
+        .field-value .arrow {
+            color: #00d4ff;
+            font-weight: 600;
+        }
+
+        .field-value .new-value {
+            color: #22c55e;
+            font-weight: 600;
+        }
+
+        .history-footer {
+            padding-top: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .change-count {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: #f59e0b;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .history-empty {
+            text-align: center;
+            padding: 40px;
+            color: rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+        }
+
+        .detail-no-image {
+            text-align: center;
+            padding: 40px;
+            color: var(--text-secondary);
+            background: var(--primary-bg);
+            border-radius: 8px;
+        }
+
+        .detail-remarks-index {
+            display: inline-block;
+            width: 24px;
+            height: 24px;
+            background: var(--accent-color);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin-right: 10px;
+            flex-shrink: 0;
+        }
+
+        .detail-remarks-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        /* 移动端响应式 */
+        @media (max-width: 767px) {
+            .detail-page {
+                padding: 10px;
+            }
+
+            .detail-header {
+                padding: 20px;
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .detail-header h1 {
+                font-size: 1.5rem;
+            }
+
+            .detail-body {
+                padding: 20px;
+            }
+
+            .detail-section h3 {
+                font-size: 1.1rem;
+            }
+
+            .detail-info-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .detail-images {
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            }
+
+            .history-fields {
+                grid-template-columns: 1fr;
+            }
+
+            .history-card {
+                padding: 16px;
+            }
+
+            .history-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            .history-time {
+                font-size: 0.85rem;
+            }
+
+            .history-badge {
+                font-size: 0.8rem;
+                padding: 5px 12px;
+            }
+
+            .history-field {
+                padding: 8px 10px;
+            }
+
+            .field-label,
+            .field-value {
+                font-size: 0.8rem;
+            }
+
+            .change-count {
+                font-size: 0.8rem;
+            }
+        }
+
+        /* 页面过渡动画 */
+        .page-transition {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--primary-bg);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .page-transition.active {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .page-transition-spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid var(--border-color);
+            border-top-color: var(--accent-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 页面过渡动画层 -->
+    <div id="pageTransition" class="page-transition">
+        <div class="page-transition-spinner"></div>
+    </div>
+
+    <!-- 详情页面主容器 -->
+    <div class="detail-page">
+        <div class="detail-container">
+            <!-- 页面头部 -->
+            <div class="detail-header">
+                <h1 id="projectTitle">项目详情</h1>
+                <div class="detail-header-actions">
+                    <button id="editBtn" class="btn btn-primary">编辑</button>
+                    <button id="cancelBtn" class="btn btn-secondary">返回</button>
+                </div>
+            </div>
+
+            <!-- 页面主体 -->
+            <div class="detail-body">
+                <!-- 产品图片 -->
+                <section class="detail-section">
+                    <h3>产品图片</h3>
+                    <div id="detailImages" class="detail-images">
+                        <p class="text-secondary">暂无图片</p>
+                    </div>
+                </section>
+
+                <!-- 项目基本信息 -->
+                <section class="detail-section">
+                    <h3>项目信息</h3>
+                    <div class="detail-info-grid">
+                        <div class="detail-info-item">
+                            <label>项目名称</label>
+                            <div id="detailName" class="value">-</div>
+                        </div>
+                        <div class="detail-info-item">
+                            <label>品牌</label>
+                            <div id="detailBrand" class="value">-</div>
+                        </div>
+                        <div class="detail-info-item">
+                            <label>项目类型</label>
+                            <div id="detailCategory" class="value">-</div>
+                        </div>
+                        <div class="detail-info-item">
+                            <label>项目情况</label>
+                            <div id="detailProductType" class="value">-</div>
+                        </div>
+                        <div class="detail-info-item">
+                            <label>优先级</label>
+                            <div id="detailPriority" class="value">-</div>
+                        </div>
+                        <div class="detail-info-item">
+                            <label>预计上市时间</label>
+                            <div id="detailLaunchDate" class="value">-</div>
+                        </div>
+                        <div class="detail-info-item">
+                            <label>创建时间</label>
+                            <div id="detailCreatedAt" class="value">-</div>
+                        </div>
+                        <div class="detail-info-item">
+                            <label>更新时间</label>
+                            <div id="detailUpdatedAt" class="value">-</div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 项目状态与进度 -->
+                <section class="detail-section">
+                    <h3>状态与进度</h3>
+                    <div class="detail-info-grid">
+                        <div class="detail-info-item" style="grid-column: 1 / -1;">
+                            <label>当前状态</label>
+                            <div id="detailStatus" class="value">
+                                <span class="detail-status">未设置</span>
+                            </div>
+                        </div>
+                        <div class="detail-info-item" style="grid-column: 1 / -1;">
+                            <label>项目进度</label>
+                            <div class="detail-progress">
+                                <div class="detail-progress-bar">
+                                    <div id="detailProgressFill" class="detail-progress-fill" style="width: 0%;"></div>
+                                </div>
+                                <span id="detailProgressText" class="detail-progress-text">0%</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 项目备注 -->
+                <section id="remarksSection" class="detail-section" style="display: none;">
+                    <h3>备注记录</h3>
+                    <div id="detailRemarks" class="detail-remarks">
+                        <p class="text-secondary">暂无备注</p>
+                    </div>
+                </section>
+
+                <!-- 项目历史 -->
+                <section id="historySection" class="detail-section" style="display: none;">
+                    <h3>修改历史</h3>
+                    <div id="detailHistory" class="detail-history">
+                        <p class="text-secondary">暂无历史记录</p>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="detail.js"></script>
+</body>
+</html>
